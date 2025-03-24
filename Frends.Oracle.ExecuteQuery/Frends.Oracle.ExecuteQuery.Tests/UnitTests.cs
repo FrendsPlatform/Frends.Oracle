@@ -59,6 +59,7 @@ class TestClass
         _input = new Input
         {
             ConnectionString = _connectionString,
+            ExecuteType = ExecuteTypes.Auto
         };
 
         _options = new Options
@@ -267,6 +268,71 @@ class TestClass
         result = await Oracle.ExecuteQuery(_input, _options, new CancellationToken());
         Assert.AreEqual("Matti", (string)result.Output[0]["FIRST_NAME"]);
         Assert.AreEqual("Meikäläinen", (string)result.Output[0]["LAST_NAME"]);
+    }
+
+    [Test]
+    public async Task ExecuteQuery_NonQueryExecutionType_Explicit()
+    {
+        _input.ExecuteType = ExecuteTypes.NonQuery;
+        _input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meikäläinen')";
+
+        var result = await Oracle.ExecuteQuery(_input, _options, new CancellationToken());
+
+        Assert.That(result, Is.Not.Null);
+        Assert.AreEqual(true, result.Success);
+        Assert.AreEqual(1, (int)result.Output["AffectedRows"]);
+    }
+
+    [Test]
+    public async Task ExecuteQuery_ExecuteReaderExecutionType_Explicit()
+    {
+        _input.ExecuteType = ExecuteTypes.NonQuery;
+        _input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meikäläinen')";
+        await Oracle.ExecuteQuery(_input, _options, new CancellationToken());
+
+        _input.ExecuteType = ExecuteTypes.ExecuteReader;
+        _input.Query = "select first_name from workers where id = 1";
+
+        var result = await Oracle.ExecuteQuery(_input, _options, new CancellationToken());
+
+        Assert.That(result, Is.Not.Null);
+        Assert.AreEqual(true, result.Success);
+        Assert.AreEqual(typeof(JArray), result.Output.GetType());
+        Assert.AreEqual("Matti", (string)result.Output[0]["FIRST_NAME"]);
+    }
+
+    [Test]
+    public async Task ExecuteQuery_ScalarExecutionType_Count()
+    {
+        _input.ExecuteType = ExecuteTypes.NonQuery;
+        _input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meikäläinen')";
+        await Oracle.ExecuteQuery(_input, _options, new CancellationToken());
+
+        _input.ExecuteType = ExecuteTypes.Scalar;
+        _input.Query = "select count(*) from workers";
+
+        var result = await Oracle.ExecuteQuery(_input, _options, new CancellationToken());
+
+        Assert.That(result, Is.Not.Null);
+        Assert.AreEqual(true, result.Success);
+        Assert.AreEqual(1, (int)(decimal)result.Output);
+    }
+
+    [Test]
+    public async Task ExecuteQuery_ScalarExecutionType_SingleValue()
+    {
+        _input.ExecuteType = ExecuteTypes.NonQuery;
+        _input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meikäläinen')";
+        await Oracle.ExecuteQuery(_input, _options, new CancellationToken());
+
+        _input.ExecuteType = ExecuteTypes.Scalar;
+        _input.Query = "select first_name from workers where id = 1";
+
+        var result = await Oracle.ExecuteQuery(_input, _options, new CancellationToken());
+
+        Assert.That(result, Is.Not.Null);
+        Assert.AreEqual(true, result.Success);
+        Assert.AreEqual("Matti", (string)result.Output);
     }
 }
 

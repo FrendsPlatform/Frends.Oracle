@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.0.0] - 2025-03-24
+### Added
+- [Breaking] New 'ExecuteType' parameter to control how SQL command string is executed.
+- Default value for new parameter is 'Auto'
+- Use the default parameter if you want the Task to work as before.
+
 ## [2.0.1] - 2022-11-04
 ### Fixed
 - Fixed issue which resulted to task not able to close connection.

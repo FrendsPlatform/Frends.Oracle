@@ -7,7 +7,7 @@
 public enum TransactionIsolationLevel
 {
     Default,
-    None, 
+    None,
     ReadUncommitted,
     ReadCommitted,
     RepeatableRead,
