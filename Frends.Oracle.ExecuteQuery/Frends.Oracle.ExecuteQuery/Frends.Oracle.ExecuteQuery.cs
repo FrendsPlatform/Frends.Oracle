@@ -40,21 +40,47 @@ public static class Oracle
                 command.Parameters.AddRange(input.Parameters.Select(p => CreateOracleParameter(p)).ToArray());
             try
             {
-                // Execute query
-                if (input.Query.ToLower().StartsWith("select"))
+                Result result;
+                JToken dataObject;
+                DbDataReader dataReader;
+                int rows;
+
+                switch (input.ExecuteType)
                 {
-                    var reader = await command.ExecuteReaderAsync(cancellationToken);
-                    var result = reader.ToJson(cancellationToken);
-                    await con.CloseAsync();
-                    return new Result(true, "Success", result);
+                    case ExecuteTypes.Auto:
+                        // Execute query
+                        if (input.Query.ToLower().StartsWith("select"))
+                        {
+                            dataReader = await command.ExecuteReaderAsync(cancellationToken);
+                            dataObject = dataReader.ToJson(cancellationToken);
+                            result = new Result(true, "Success", dataObject);
+                            break;
+                        }
+                        else
+                        {
+                            rows = await command.ExecuteNonQueryAsync(cancellationToken);
+                            await transaction.CommitAsync(cancellationToken);
+                            result = new Result(true, "Success", JToken.FromObject(new { AffectedRows = rows }));
+                            break;
+                        }
+                    case ExecuteTypes.NonQuery:
+                        rows = await command.ExecuteNonQueryAsync(cancellationToken);
+                        await transaction.CommitAsync(cancellationToken);
+                        result = new Result(true, "Success", JToken.FromObject(new { AffectedRows = rows }));
+                        break;
+                    case ExecuteTypes.ExecuteReader:
+                        dataReader = await command.ExecuteReaderAsync(cancellationToken);
+                        dataObject = dataReader.ToJson(cancellationToken);
+                        result = new Result(true, "Success", dataObject);
+                        break;
+                    case ExecuteTypes.Scalar:
+                        var scalarResult = await command.ExecuteScalarAsync(cancellationToken);
+                        result = new Result(true, "Success", scalarResult ?? string.Empty);
+                        break;
+                    default:
+                        throw new NotSupportedException();
                 }
-                else
-                {
-                    var rows = await command.ExecuteNonQueryAsync(cancellationToken);
-                    await transaction.CommitAsync(cancellationToken);
-                    await con.CloseAsync();
-                    return new Result(true, "Success", JToken.FromObject(new { AffectedRows = rows }));
-                }
+                return result;
             }
             catch (Exception ex)
             {
