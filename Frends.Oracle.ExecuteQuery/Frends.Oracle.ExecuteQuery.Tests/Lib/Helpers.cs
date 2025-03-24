@@ -100,7 +100,7 @@ end;";
         {
             cmd.ExecuteNonQuery();
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
             throw;
