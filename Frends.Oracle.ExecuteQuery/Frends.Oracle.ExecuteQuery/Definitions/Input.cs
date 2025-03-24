@@ -43,7 +43,7 @@ public class Input
     /// Scalar: Use this operation to execute any arbitrary SQL statements in SQL Server to return a single value. This operation returns the value only in the first column of the first row in the result set returned by the SQL statement.
     /// </summary>
     /// <example>ExecuteType.ExecuteReader</example>
-    [DefaultValue(ExecuteTypes.ExecuteReader)]
+    [DefaultValue(ExecuteTypes.Auto)]
     public ExecuteTypes ExecuteType { get; set; }
 }
 

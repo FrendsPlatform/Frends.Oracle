@@ -94,8 +94,8 @@ public static class Oracle
             {
                 await con.CloseAsync();
                 con.Dispose();
-            }   
-        } 
+            }
+        }
         catch (Exception ex)
         {
             if (options.ThrowErrorOnFailure)
@@ -113,7 +113,7 @@ public static class Oracle
     {
         return new OracleParameter()
         {
-            ParameterName = parameter.Name, 
+            ParameterName = parameter.Name,
             Value = parameter.Value,
             OracleDbType = (OracleDbType)Enum.Parse(typeof(OracleDbType), parameter.DataType.ToString())
         };
@@ -123,7 +123,7 @@ public static class Oracle
     {
         using var writer = new JTokenWriter();
         writer.Formatting = Formatting.Indented;
-        writer.Culture = CultureInfo.InvariantCulture; 
+        writer.Culture = CultureInfo.InvariantCulture;
 
         writer.WriteStartArray();
 
