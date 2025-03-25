@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.1.0] - 2025-03-25
+### Fixed
+- Fixed issue with converting query results to JToken.
+- Updated Newtonsoft.Json to version 13.0.3.
+- Updated Oracle.ManagedDataAccess.Core to version 3.21.170.
+
 ## [3.0.0] - 2025-03-24
 ### Added
 - [Breaking] New 'ExecuteType' parameter to control how SQL command string is executed.
