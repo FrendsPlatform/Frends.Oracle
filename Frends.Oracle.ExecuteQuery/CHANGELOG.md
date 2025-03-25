@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.1.1] - 2025-03-25
+### Changed
+- Update packages:
+  Microsoft.Extensions.DependencyInjection  5.0.1    -> 9.0.3
+  Oracle.ManagedDataAccess.Core             3.21.170 -> 23.7.0
+  System.ComponentModel.Annotations         4.7.0    -> 5.0.0
+  coverlet.collector                        3.1.0    -> 6.0.4
+  Microsoft.NET.Test.Sdk                    16.6.1   -> 17.13.0
+  MSTest.TestFramework                      2.2.8    -> 3.8.3
+  nunit                                     3.12.0   -> 4.3.2
+  NUnit3TestAdapter                         3.17.0   -> 5.0.0
+
 ## [3.1.0] - 2025-03-25
 ### Fixed
 - Fixed issue with converting query results to JToken.
