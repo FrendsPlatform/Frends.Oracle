@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.1.1] - 2025-03-25
+## [3.2.0] - 2025-03-25
 ### Changed
 - Update packages:
   Microsoft.Extensions.DependencyInjection  5.0.1    -> 9.0.3
