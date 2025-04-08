@@ -1,38 +1,38 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-	  <TargetFramework>net6.0</TargetFramework>
-	  <ImplicitUsings>enable</ImplicitUsings>
-	  <IncludeSource>true</IncludeSource>
-	  <AssemblyName>Frends.Oracle.ExecuteProcedure</AssemblyName>
-	  <RootNamespace>Frends.Oracle.ExecuteProcedure</RootNamespace>
+	<PropertyGroup>
+		<TargetFramework>net6.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IncludeSource>true</IncludeSource>
+		<AssemblyName>Frends.Oracle.ExecuteProcedure</AssemblyName>
+		<RootNamespace>Frends.Oracle.ExecuteProcedure</RootNamespace>
 
-	  <Version>2.0.0</Version>
-	  <Authors>Frends</Authors>
-	  <Copyright>Frends</Copyright>
-	  <Company>Frends</Company>
-	  <Product>Frends</Product>
-	  <PackageTags>Frends</PackageTags>
-	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
-	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
-	  <Description>Executes stored procedures in Oracle database.</Description>
-	  <PackageProjectUrl>https://frends.com/</PackageProjectUrl>
-	  <RepositoryUrl>https://github.com/FrendsPlatform/Frends.Oracle/tree/main/Frends.Oracle.ExecuteProcedure</RepositoryUrl>
-  </PropertyGroup>
+		<Version>2.1.0</Version>
+		<Authors>Frends</Authors>
+		<Copyright>Frends</Copyright>
+		<Company>Frends</Company>
+		<Product>Frends</Product>
+		<PackageTags>Frends</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<Description>Executes stored procedures in Oracle database.</Description>
+		<PackageProjectUrl>https://frends.com/</PackageProjectUrl>
+		<RepositoryUrl>
+			https://github.com/FrendsPlatform/Frends.Oracle/tree/main/Frends.Oracle.ExecuteProcedure</RepositoryUrl>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <None Include="FrendsTaskMetadata.json" Pack="true" PackagePath="/">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+	<ItemGroup>
+		<None Include="FrendsTaskMetadata.json" Pack="true" PackagePath="/">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-	<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.0" />
-	<PackageReference Include="Newtonsoft.Json" Version="12.0.1" />
-	<PackageReference Include="Oracle.ManagedDataAccess.Core" Version="3.21.70" />
-    <PackageReference Include="System.ComponentModel.Annotations" Version="4.7.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.3" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.7.0" />
+		<PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+	</ItemGroup>
 
 </Project>
-

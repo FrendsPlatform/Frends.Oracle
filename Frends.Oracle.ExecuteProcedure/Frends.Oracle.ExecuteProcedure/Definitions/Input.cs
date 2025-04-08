@@ -21,7 +21,7 @@ public class Input
     /// </summary>
     /// <example>Type.StoredProcedure</example>
     [DefaultValue(OracleCommandType.StoredProcedure)]
-    public OracleCommandType CommandType { get; set; } 
+    public OracleCommandType CommandType { get; set; }
 
     /// <summary>
     /// Parameters for the database query.
