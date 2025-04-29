@@ -3,8 +3,11 @@ using System.Threading;
 using Frends.Oracle.ExecuteProcedure.Definitions;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
+using NUnit.Framework.Legacy;
 
 namespace Frends.Oracle.ExecuteProcedure.Tests;
+// To run tests run docker-compose up -d
+// You will need free oracle account to download image
 
 [TestFixture]
 class UnitTests
@@ -91,7 +94,7 @@ end {_proc};";
         };
 
         var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
 
         _input.Command = _proc;
         _input.CommandType = OracleCommandType.StoredProcedure;
@@ -117,7 +120,7 @@ end {_proc};";
         };
 
         result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
     }
 
     [Test]
@@ -136,7 +139,7 @@ end {_proc};";
         };
 
         var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
 
         _input.Command = _proc;
         _input.CommandType = OracleCommandType.StoredProcedure;
@@ -162,7 +165,7 @@ end {_proc};";
         };
 
         result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
     }
 
     [Test]
@@ -181,7 +184,7 @@ end {_proc};";
         };
 
         var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
 
         _input.Command = _proc;
         _input.CommandType = OracleCommandType.StoredProcedure;
@@ -207,7 +210,7 @@ end {_proc};";
         };
 
         result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
     }
 
     [Test]
@@ -226,7 +229,7 @@ end {_proc};";
         };
 
         var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
 
         _input.Command = _proc;
         _input.CommandType = OracleCommandType.StoredProcedure;
@@ -252,7 +255,7 @@ end {_proc};";
         };
 
         result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
     }
 
     [Test]
@@ -271,7 +274,7 @@ end {_proc};";
         };
 
         var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
 
         _input.Command = _proc;
         _input.CommandType = OracleCommandType.StoredProcedure;
@@ -297,7 +300,7 @@ end {_proc};";
         };
 
         result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
     }
 
     [Test]
@@ -322,7 +325,7 @@ end {_proc};";
         };
 
         var result = await Oracle.ExecuteProcedure(_input, output, options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
 
         _input.Command = _proc;
         _input.CommandType = OracleCommandType.StoredProcedure;
@@ -348,6 +351,6 @@ end {_proc};";
         };
 
         result = await Oracle.ExecuteProcedure(_input, output, options, new CancellationToken());
-        Assert.IsTrue(result.Success);
+        ClassicAssert.IsTrue(result.Success);
     }
 }

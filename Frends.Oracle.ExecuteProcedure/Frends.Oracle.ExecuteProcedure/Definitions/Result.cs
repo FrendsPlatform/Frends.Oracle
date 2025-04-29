@@ -4,7 +4,7 @@
 /// Return object with private setters.
 /// </summary>
 public class Result
-{ 
+{
     /// <summary>
     /// Boolean value of success of the query.
     /// </summary>

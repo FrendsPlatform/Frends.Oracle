@@ -19,13 +19,13 @@ internal static class Helpers
         foreach (var i in Enumerable.Range(1, 15))
         {
             try { con.Open(); }
-            catch 
+            catch
             {
                 if (con.State == ConnectionState.Open)
                     break;
 
                 Thread.Sleep(60000);
-            }   
+            }
         }
         if (con.State != ConnectionState.Open)
             throw new Exception("Check that the docker container is up and running.");
