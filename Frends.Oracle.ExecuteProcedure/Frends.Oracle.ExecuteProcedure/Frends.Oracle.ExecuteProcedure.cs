@@ -81,7 +81,7 @@ public class Oracle
 
                 return new Result(true, outputDict);
             }
-                
+
             var result = HandleDataset(outputOracleParams, output);
             return new Result(true, result);
 
