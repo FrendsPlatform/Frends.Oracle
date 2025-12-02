@@ -4,6 +4,8 @@ using Frends.Oracle.ExecuteProcedure.Definitions;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
 using NUnit.Framework.Legacy;
+using System.Collections.Generic;
+using System;
 
 namespace Frends.Oracle.ExecuteProcedure.Tests;
 // To run tests run docker-compose up -d
@@ -352,5 +354,42 @@ end {_proc};";
 
         result = await Oracle.ExecuteProcedure(_input, output, options, new CancellationToken());
         ClassicAssert.IsTrue(result.Success);
+    }
+
+    [Test]
+    public async Task ExecuteProcedure_ReturnsCorrectOutputParameterValue()
+    {
+        var input = new Input
+        {
+            Command = @"
+            BEGIN
+                :v_doc_rev := 'OK_TEST';
+            END;",
+            CommandType = OracleCommandType.Command,
+            Parameters = Array.Empty<InputParameter>(),
+            ConnectionString = _connectionString
+        };
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.Parameters,
+            OutputParameters = new[]
+            {
+            new OutputParameter
+            {
+                Name = "v_doc_rev",
+                DataType = ProcedureParameterType.NVarchar2,
+                Size = 50
+            }
+        }
+        };
+
+        var result = await Oracle.ExecuteProcedure(input, output, _options, new CancellationToken());
+
+        ClassicAssert.IsTrue(result.Success);
+
+        var returnedParams = (Dictionary<string, object>)result.Output;
+        ClassicAssert.IsTrue(returnedParams.ContainsKey("v_doc_rev"));
+        ClassicAssert.AreEqual("OK_TEST", returnedParams["v_doc_rev"]?.ToString());
     }
 }
