@@ -62,12 +62,19 @@ internal static class Helpers
 
     internal static void DropProcedure(OracleConnection con, string name)
     {
-        using var cmd = con.CreateCommand();
-        cmd.CommandText = $"DROP PROCEDURE test_user.{name}";
-
-        cmd.CommandType = CommandType.Text;
-
-        cmd.ExecuteNonQuery();
+        try
+        {
+            using var cmd = con.CreateCommand();
+            cmd.CommandText = $"DROP PROCEDURE test_user.{name}";
+            cmd.CommandType = CommandType.Text;
+            cmd.ExecuteNonQuery();
+        }
+        catch (OracleException ex)
+        {
+            // ORA-04043: object does not exist - safe to ignore in teardown
+            if (ex.Number != 4043)
+                throw;
+        }
     }
 
     internal static void CreateTestUser(OracleConnection con)

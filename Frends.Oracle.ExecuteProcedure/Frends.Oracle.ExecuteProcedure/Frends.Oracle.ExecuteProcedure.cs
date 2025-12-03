@@ -6,6 +6,7 @@ using System.Data;
 using System.Text;
 using System.Xml.Linq;
 using Newtonsoft.Json;
+using Oracle.ManagedDataAccess.Types;
 
 namespace Frends.Oracle.ExecuteProcedure;
 
@@ -71,7 +72,15 @@ public class Oracle
             if (output.DataReturnType == OracleCommandReturnType.AffectedRows)
                 return new Result(true, rowsAffected);
             else if (output.DataReturnType == OracleCommandReturnType.Parameters)
-                return new Result(true, outputOracleParams.ToList());
+            {
+                var outputDict = outputOracleParams
+                    .ToDictionary(
+                        p => p.ParameterName,
+                        p => p.Value is OracleString os ? os.Value : p.Value
+                    );
+
+                return new Result(true, outputDict);
+            }
 
             var result = HandleDataset(outputOracleParams, output);
             return new Result(true, result);
