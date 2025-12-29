@@ -6,7 +6,6 @@ using System.Data;
 using System.Text;
 using System.Xml.Linq;
 using Newtonsoft.Json;
-using Oracle.ManagedDataAccess.Types;
 
 namespace Frends.Oracle.ExecuteProcedure;
 
@@ -64,6 +63,12 @@ public class Oracle
             outputOracleParams = command.Parameters.Cast<OracleParam>()
                 .Where(p => p.Direction == ParameterDirection.Output);
 
+            var outputDict = outputOracleParams
+                .ToDictionary(
+                    p => p.ParameterName,
+                    p => GetOracleParameterValue(p)
+                );
+
             command.Dispose();
 
             await con.CloseAsync();
@@ -73,12 +78,6 @@ public class Oracle
                 return new Result(true, rowsAffected);
             else if (output.DataReturnType == OracleCommandReturnType.Parameters)
             {
-                var outputDict = outputOracleParams
-                    .ToDictionary(
-                        p => p.ParameterName,
-                        p => p.Value is OracleString os ? os.Value : p.Value
-                    );
-
                 return new Result(true, outputDict);
             }
 
@@ -161,5 +160,34 @@ public class Oracle
         else
             xelem.Value = parameter.Value.ToString();
         return xelem;
+    }
+
+    private static object GetOracleParameterValue(OracleParam p)
+    {
+        if (p.Value == null || p.Value == DBNull.Value)
+            return null;
+
+        return p.Value switch
+        {
+            global::Oracle.ManagedDataAccess.Types.OracleString v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleDecimal v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleDate v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleTimeStamp v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleTimeStampTZ v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleTimeStampLTZ v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleClob v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleBlob blob => ReadBlob(blob),
+            _ => p.Value
+        };
+    }
+
+    private static byte[] ReadBlob(global::Oracle.ManagedDataAccess.Types.OracleBlob blob)
+    {
+        if (blob.IsNull || blob.Length == 0)
+            return null;
+
+        byte[] buffer = new byte[blob.Length];
+        blob.Read(buffer, 0, (int)blob.Length);
+        return buffer;
     }
 }

@@ -392,4 +392,67 @@ end {_proc};";
         ClassicAssert.IsTrue(returnedParams.ContainsKey("v_doc_rev"));
         ClassicAssert.AreEqual("OK_TEST", returnedParams["v_doc_rev"]?.ToString());
     }
+
+    [Test]
+    public async Task ExecuteProcedure_ViewDocument_AllTypesAndNulls()
+    {
+        var input = new Input
+        {
+            Command = @"
+            BEGIN
+                -- Simulate View_Document outputs
+                :v_file_data := UTL_RAW.CAST_TO_RAW('PDF_BINARY_DATA_HERE');
+                :v_file_type := 'PDF';
+                :v_doc_title := 'Sales_Report.pdf';
+                :v_err_msg := NULL;
+                
+                -- Additional test: some NULLs
+                :v_optional_field := NULL;
+            END;",
+            CommandType = OracleCommandType.Command,
+            Parameters = Array.Empty<InputParameter>(),
+            ConnectionString = _connectionString
+        };
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.Parameters,
+            OutputParameters = new[]
+            {
+            new OutputParameter { Name = "v_file_data", DataType = ProcedureParameterType.Blob, Size = 90000000 },
+            new OutputParameter { Name = "v_file_type", DataType = ProcedureParameterType.Varchar2, Size = 100 },
+            new OutputParameter { Name = "v_doc_title", DataType = ProcedureParameterType.Varchar2, Size = 200 },
+            new OutputParameter { Name = "v_err_msg", DataType = ProcedureParameterType.Varchar2, Size = 1000 },
+            new OutputParameter { Name = "v_optional_field", DataType = ProcedureParameterType.Varchar2, Size = 100 }
+        }
+        };
+
+        var options = new Options
+        {
+            BindParameterByName = true,
+            TimeoutSeconds = 30,
+            ThrowErrorOnFailure = false
+        };
+
+        var result = await Oracle.ExecuteProcedure(input, output, options, new CancellationToken());
+
+        ClassicAssert.IsTrue(result.Success, "Should execute successfully");
+        var returnedParams = (Dictionary<string, object>)result.Output;
+
+        ClassicAssert.AreEqual("PDF", returnedParams["v_file_type"]?.ToString());
+        ClassicAssert.AreEqual("Sales_Report.pdf", returnedParams["v_doc_title"]?.ToString());
+
+        ClassicAssert.IsNull(returnedParams["v_err_msg"], "err_msg should be NULL");
+        ClassicAssert.IsNull(returnedParams["v_optional_field"], "optional field should be NULL");
+
+        var blobValue = returnedParams["v_file_data"];
+        ClassicAssert.IsNotNull(blobValue, "BLOB should have value");
+
+        ClassicAssert.IsFalse(
+            blobValue.GetType().FullName.Contains("OracleBlob"),
+            "BLOB should be converted to byte[] or string, not OracleBlob object!"
+        );
+
+        Console.WriteLine($"BLOB type: {blobValue.GetType().Name}");
+    }
 }

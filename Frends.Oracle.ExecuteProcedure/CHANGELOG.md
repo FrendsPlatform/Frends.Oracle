@@ -1,8 +1,12 @@
 # Changelog
 
+## [2.3.0] - 2025-12-29
+### Fixed
+- Improved Oracle parameter handling for NULL values and BLOBs.
+
 ## [2.2.0] - 2025-12-02
 ### Fixed
-Fix missing output parameter values
+- Fix missing output parameter values
 
 ## [2.1.0] - 2025-03-25
 ### Changed
