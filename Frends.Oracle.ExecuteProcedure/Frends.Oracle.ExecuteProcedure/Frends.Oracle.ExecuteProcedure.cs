@@ -152,13 +152,11 @@ public class Oracle
     private static XElement ParameterToXElement(OracleParam parameter)
     {
         var xelem = new XElement(parameter.ParameterName);
-        if (parameter.OracleDbType == OracleDbType.Clob)
-        {
-            var reader = new StreamReader((Stream)parameter.Value, Encoding.Unicode);
-            xelem.Value = reader.ReadToEnd();
-        }
-        else
-            xelem.Value = parameter.Value.ToString();
+        var value = GetOracleParameterValue(parameter);
+        if (value == null)
+            return xelem;
+        xelem.Value = value.ToString();
+
         return xelem;
     }
 
@@ -176,18 +174,18 @@ public class Oracle
             global::Oracle.ManagedDataAccess.Types.OracleTimeStampTZ v => v.IsNull ? null : v.Value,
             global::Oracle.ManagedDataAccess.Types.OracleTimeStampLTZ v => v.IsNull ? null : v.Value,
             global::Oracle.ManagedDataAccess.Types.OracleClob v => v.IsNull ? null : v.Value,
-            global::Oracle.ManagedDataAccess.Types.OracleBlob blob => ReadBlob(blob),
+            global::Oracle.ManagedDataAccess.Types.OracleBlob blob => BlobToBase64(blob),
             _ => p.Value
         };
     }
-
-    private static byte[] ReadBlob(global::Oracle.ManagedDataAccess.Types.OracleBlob blob)
+    private static string BlobToBase64(global::Oracle.ManagedDataAccess.Types.OracleBlob blob)
     {
-        if (blob.IsNull || blob.Length == 0)
+        if (blob == null || blob.IsNull || blob.Length == 0)
             return null;
 
         byte[] buffer = new byte[blob.Length];
         blob.Read(buffer, 0, (int)blob.Length);
-        return buffer;
+
+        return Convert.ToBase64String(buffer);
     }
 }
