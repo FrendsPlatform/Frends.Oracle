@@ -15,23 +15,29 @@ internal static class Helpers
     /// </summary>
     internal static void TestConnectionBeforeRunningTests(string connectionString)
     {
-        using var con = new OracleConnection(connectionString);
-        foreach (var i in Enumerable.Range(1, 15))
+        const int maxRetries = 30;
+        const int sleepMs = 5000; // 5 seconds
+        bool success = false;
+
+        for (int i = 0; i < maxRetries; i++)
         {
-            try { con.Open(); }
+            try
+            {
+                using var con = new OracleConnection(connectionString);
+                con.Open();
+                success = true;
+                break;
+            }
             catch
             {
-                if (con.State == ConnectionState.Open)
-                    break;
-
-                Thread.Sleep(60000);
+                Thread.Sleep(sleepMs); // wait before retrying
             }
         }
-        if (con.State != ConnectionState.Open)
-            throw new Exception("Check that the docker container is up and running.");
-        con.Close();
 
+        if (!success)
+            throw new Exception("Check that the docker container is up and running.");
     }
+
     internal static void CreateTestTable(OracleConnection con)
     {
         using var cmd = con.CreateCommand();
