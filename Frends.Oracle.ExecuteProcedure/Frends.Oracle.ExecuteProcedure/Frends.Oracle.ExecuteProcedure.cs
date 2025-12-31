@@ -185,7 +185,7 @@ public class Oracle
         const int chunkSize = 81920;
         long remaining = blob.Length;
 
-        using var ms = new MemoryStream((int)blob.Length);
+        using var ms = new MemoryStream();
         byte[] buffer = new byte[chunkSize];
 
         while (remaining > 0)
