@@ -3,7 +3,6 @@ using OracleParam = Oracle.ManagedDataAccess.Client.OracleParameter;
 using System.ComponentModel;
 using Frends.Oracle.ExecuteProcedure.Definitions;
 using System.Data;
-using System.Text;
 using System.Xml.Linq;
 using Newtonsoft.Json;
 
@@ -183,9 +182,25 @@ public class Oracle
         if (blob == null || blob.IsNull || blob.Length == 0)
             return null;
 
-        byte[] buffer = new byte[blob.Length];
-        blob.Read(buffer, 0, (int)blob.Length);
+        const int chunkSize = 81920;
+        long remaining = blob.Length;
 
-        return Convert.ToBase64String(buffer);
+        using var ms = new MemoryStream((int)blob.Length);
+        byte[] buffer = new byte[chunkSize];
+
+        while (remaining > 0)
+        {
+            int bytesToRead = (int)Math.Min(chunkSize, remaining);
+            int bytesRead = blob.Read(buffer, 0, bytesToRead);
+
+            if (bytesRead <= 0)
+                throw new EndOfStreamException("Unexpected end of Oracle BLOB stream.");
+
+            ms.Write(buffer, 0, bytesRead);
+            remaining -= bytesRead;
+        }
+
+        return Convert.ToBase64String(ms.ToArray());
     }
+
 }

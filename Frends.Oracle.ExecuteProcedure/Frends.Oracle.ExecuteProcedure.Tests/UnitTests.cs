@@ -11,6 +11,7 @@ namespace Frends.Oracle.ExecuteProcedure.Tests;
 
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
+using System.Linq;
 
 [TestFixture]
 class UnitTests
@@ -483,4 +484,55 @@ end {_proc};";
             "BLOB should be converted to byte[] or string, not OracleBlob object!"
         );
     }
+
+    [Test]
+    public async Task ExecuteProcedure_LargeBlob_IsReadCompletely()
+    {
+        const int expectedMinSize = 250000; // > 80 KB
+
+        _input.Command = @"
+            DECLARE
+                l_blob BLOB;
+                l_raw  RAW(32767);
+            BEGIN
+                DBMS_LOB.CREATETEMPORARY(l_blob, TRUE);
+
+                FOR i IN 1..8 LOOP
+                    l_raw := UTL_RAW.CAST_TO_RAW(RPAD('A', 32000, 'A'));
+                    DBMS_LOB.WRITEAPPEND(l_blob, UTL_RAW.LENGTH(l_raw), l_raw);
+                END LOOP;
+
+                :out_blob := l_blob;
+            END;";
+
+        _input.CommandType = OracleCommandType.Command;
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.Parameters,
+            OutputParameters = new[]
+            {
+            new OutputParameter
+            {
+                Name = "out_blob",
+                DataType = ProcedureParameterType.Blob,
+                Size = 1000000
+            }
+        }
+        };
+
+        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        ClassicAssert.IsTrue(result.Success);
+
+        var dict = (Dictionary<string, object>)result.Output;
+        var base64 = dict["out_blob"] as string;
+
+        ClassicAssert.IsNotNull(base64);
+
+        byte[] decoded = Convert.FromBase64String(base64);
+
+        ClassicAssert.Greater(decoded.Length, expectedMinSize);
+        ClassicAssert.IsTrue(decoded.All(b => b == (byte)'A'));
+    }
+
 }
