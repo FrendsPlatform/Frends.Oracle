@@ -3,10 +3,8 @@ using OracleParam = Oracle.ManagedDataAccess.Client.OracleParameter;
 using System.ComponentModel;
 using Frends.Oracle.ExecuteProcedure.Definitions;
 using System.Data;
-using System.Text;
 using System.Xml.Linq;
 using Newtonsoft.Json;
-using Oracle.ManagedDataAccess.Types;
 
 namespace Frends.Oracle.ExecuteProcedure;
 
@@ -64,6 +62,12 @@ public class Oracle
             outputOracleParams = command.Parameters.Cast<OracleParam>()
                 .Where(p => p.Direction == ParameterDirection.Output);
 
+            var outputDict = outputOracleParams
+                .ToDictionary(
+                    p => p.ParameterName,
+                    p => GetOracleParameterValue(p)
+                );
+
             command.Dispose();
 
             await con.CloseAsync();
@@ -73,12 +77,6 @@ public class Oracle
                 return new Result(true, rowsAffected);
             else if (output.DataReturnType == OracleCommandReturnType.Parameters)
             {
-                var outputDict = outputOracleParams
-                    .ToDictionary(
-                        p => p.ParameterName,
-                        p => p.Value is OracleString os ? os.Value : p.Value
-                    );
-
                 return new Result(true, outputDict);
             }
 
@@ -153,13 +151,56 @@ public class Oracle
     private static XElement ParameterToXElement(OracleParam parameter)
     {
         var xelem = new XElement(parameter.ParameterName);
-        if (parameter.OracleDbType == OracleDbType.Clob)
-        {
-            var reader = new StreamReader((Stream)parameter.Value, Encoding.Unicode);
-            xelem.Value = reader.ReadToEnd();
-        }
-        else
-            xelem.Value = parameter.Value.ToString();
+        var value = GetOracleParameterValue(parameter);
+        if (value == null)
+            return xelem;
+        xelem.Value = value.ToString();
+
         return xelem;
     }
+
+    private static object GetOracleParameterValue(OracleParam p)
+    {
+        if (p.Value == null || p.Value == DBNull.Value)
+            return null;
+
+        return p.Value switch
+        {
+            global::Oracle.ManagedDataAccess.Types.OracleString v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleDecimal v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleDate v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleTimeStamp v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleTimeStampTZ v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleTimeStampLTZ v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleClob v => v.IsNull ? null : v.Value,
+            global::Oracle.ManagedDataAccess.Types.OracleBlob blob => BlobToBase64(blob),
+            _ => p.Value
+        };
+    }
+    private static string BlobToBase64(global::Oracle.ManagedDataAccess.Types.OracleBlob blob)
+    {
+        if (blob == null || blob.IsNull || blob.Length == 0)
+            return null;
+
+        const int chunkSize = 81920;
+        long remaining = blob.Length;
+
+        using var ms = new MemoryStream();
+        byte[] buffer = new byte[chunkSize];
+
+        while (remaining > 0)
+        {
+            int bytesToRead = (int)Math.Min(chunkSize, remaining);
+            int bytesRead = blob.Read(buffer, 0, bytesToRead);
+
+            if (bytesRead <= 0)
+                throw new EndOfStreamException("Unexpected end of Oracle BLOB stream.");
+
+            ms.Write(buffer, 0, bytesRead);
+            remaining -= bytesRead;
+        }
+
+        return Convert.ToBase64String(ms.ToArray());
+    }
+
 }

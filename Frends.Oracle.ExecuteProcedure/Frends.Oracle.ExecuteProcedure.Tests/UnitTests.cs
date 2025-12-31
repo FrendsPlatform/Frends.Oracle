@@ -8,22 +8,25 @@ using System.Collections.Generic;
 using System;
 
 namespace Frends.Oracle.ExecuteProcedure.Tests;
-// To run tests run docker-compose up -d
-// You will need free oracle account to download image
+
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
+using System.Linq;
 
 [TestFixture]
 class UnitTests
 {
     private static Input _input;
     private static Options _options;
+    private static IContainer oracleContainer;
 
     private readonly static string schema = "test_user";
-    private readonly static string _connectionString = $"Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = localhost)(PORT = 51521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = {schema}; Password={schema};";
-    private readonly static string _connectionStringSys = "Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = localhost)(PORT = 51521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = sys; Password=mysecurepassword; DBA PRIVILEGE=SYSDBA";
+    private readonly static string _connectionString = $"Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = {schema}; Password={schema};";
+    private readonly static string _connectionStringSys = "Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = sys; Password=mysecurepassword; DBA PRIVILEGE=SYSDBA";
     private readonly static string _proc = "unitestproc";
 
     [OneTimeSetUp]
-    public void OneTimeSetup()
+    public async Task OneTimeSetup()
     {
         _input = new Input
         {
@@ -34,24 +37,44 @@ class UnitTests
         {
             ThrowErrorOnFailure = true,
             TimeoutSeconds = 30,
-            BindParameterByName = true
+            BindParameterByName = true,
         };
+
+        oracleContainer = new ContainerBuilder()
+            .WithImage("container-registry.oracle.com/database/express:18.4.0-xe")
+            .WithName("Frends.Oracle.ExecuteProcedure.Tests")
+            .WithPortBinding(1521, 1521)
+            .WithEnvironment("ORACLE_PWD", "mysecurepassword")
+            .WithEnvironment("ORACLE_CHARACTERSET", "AL32UTF8")
+            // We need to wait for the container to be ready healthy.
+            // Health checks are running every 5 seconds, and it takes ~ 8 minutes to get the container ready.
+            // It gives us 120 retries + 30 as a margin. We will stop waiting after 10 minutes if it's still not ready.
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy(150, s => s.WithTimeout(TimeSpan.FromMinutes(10))))
+            .WithReuse(true)
+            .Build();
+
+        await oracleContainer.StartAsync();
 
         Helpers.TestConnectionBeforeRunningTests(_connectionStringSys);
 
-        using var con = new OracleConnection(_connectionStringSys);
+        await using var con = new OracleConnection(_connectionStringSys);
         con.Open();
         Helpers.CreateTestUser(con);
         con.Close();
     }
 
     [OneTimeTearDown]
-    public void OneTimeTearDown()
+    public async Task OneTimeTearDown()
     {
-        using var con = new OracleConnection(_connectionStringSys);
+        await using var con = new OracleConnection(_connectionStringSys);
         con.Open();
         Helpers.DropTestUser(con);
         con.Close();
+
+        if (oracleContainer != null)
+        {
+            await oracleContainer.DisposeAsync();
+        }
     }
 
     [SetUp]
@@ -59,12 +82,16 @@ class UnitTests
     {
         using var con = new OracleConnection(_connectionStringSys);
         con.Open();
+
         try
         {
             Helpers.CreateTestTable(con);
             Helpers.InsertTestData(con);
         }
-        finally { con.Close(); }
+        finally
+        {
+            con.Close();
+        }
     }
 
     [TearDown]
@@ -72,12 +99,16 @@ class UnitTests
     {
         using var con = new OracleConnection(_connectionStringSys);
         con.Open();
+
         try
         {
             Helpers.DropTestTable(con);
             Helpers.DropProcedure(con, _proc);
         }
-        finally { con.Close(); }
+        finally
+        {
+            con.Close();
+        }
     }
 
     [Test]
@@ -375,13 +406,13 @@ end {_proc};";
             DataReturnType = OracleCommandReturnType.Parameters,
             OutputParameters = new[]
             {
-            new OutputParameter
-            {
-                Name = "v_doc_rev",
-                DataType = ProcedureParameterType.NVarchar2,
-                Size = 50
+                new OutputParameter
+                {
+                    Name = "v_doc_rev",
+                    DataType = ProcedureParameterType.NVarchar2,
+                    Size = 50
+                }
             }
-        }
         };
 
         var result = await Oracle.ExecuteProcedure(input, output, _options, new CancellationToken());
@@ -392,4 +423,116 @@ end {_proc};";
         ClassicAssert.IsTrue(returnedParams.ContainsKey("v_doc_rev"));
         ClassicAssert.AreEqual("OK_TEST", returnedParams["v_doc_rev"]?.ToString());
     }
+
+    [Test]
+    public async Task ExecuteProcedure_ViewDocument_AllTypesAndNulls()
+    {
+        var input = new Input
+        {
+            Command = @"
+            BEGIN
+                -- Simulate View_Document outputs
+                :v_file_data := UTL_RAW.CAST_TO_RAW('PDF_BINARY_DATA_HERE');
+                :v_file_type := 'PDF';
+                :v_doc_title := 'Sales_Report.pdf';
+                :v_err_msg := NULL;
+                
+                -- Additional test: some NULLs
+                :v_optional_field := NULL;
+            END;",
+            CommandType = OracleCommandType.Command,
+            Parameters = Array.Empty<InputParameter>(),
+            ConnectionString = _connectionString
+        };
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.Parameters,
+            OutputParameters = new[]
+            {
+                new OutputParameter { Name = "v_file_data", DataType = ProcedureParameterType.Blob, Size = 90000000 },
+                new OutputParameter { Name = "v_file_type", DataType = ProcedureParameterType.Varchar2, Size = 100 },
+                new OutputParameter { Name = "v_doc_title", DataType = ProcedureParameterType.Varchar2, Size = 200 },
+                new OutputParameter { Name = "v_err_msg", DataType = ProcedureParameterType.Varchar2, Size = 1000 },
+                new OutputParameter { Name = "v_optional_field", DataType = ProcedureParameterType.Varchar2, Size = 100 }
+            }
+        };
+
+        var options = new Options
+        {
+            BindParameterByName = true,
+            TimeoutSeconds = 30,
+            ThrowErrorOnFailure = false
+        };
+
+        var result = await Oracle.ExecuteProcedure(input, output, options, new CancellationToken());
+
+        ClassicAssert.IsTrue(result.Success, "Should execute successfully");
+        var returnedParams = (Dictionary<string, object>)result.Output;
+
+        ClassicAssert.AreEqual("PDF", returnedParams["v_file_type"]?.ToString());
+        ClassicAssert.AreEqual("Sales_Report.pdf", returnedParams["v_doc_title"]?.ToString());
+
+        ClassicAssert.IsNull(returnedParams["v_err_msg"], "err_msg should be NULL");
+        ClassicAssert.IsNull(returnedParams["v_optional_field"], "optional field should be NULL");
+
+        var blobValue = returnedParams["v_file_data"];
+        ClassicAssert.IsNotNull(blobValue, "BLOB should have value");
+
+        ClassicAssert.IsFalse(
+            blobValue.GetType().FullName.Contains("OracleBlob"),
+            "BLOB should be converted to byte[] or string, not OracleBlob object!"
+        );
+    }
+
+    [Test]
+    public async Task ExecuteProcedure_LargeBlob_IsReadCompletely()
+    {
+        const int expectedMinSize = 250000; // > 80 KB
+
+        _input.Command = @"
+            DECLARE
+                l_blob BLOB;
+                l_raw  RAW(32767);
+            BEGIN
+                DBMS_LOB.CREATETEMPORARY(l_blob, TRUE);
+
+                FOR i IN 1..8 LOOP
+                    l_raw := UTL_RAW.CAST_TO_RAW(RPAD('A', 32000, 'A'));
+                    DBMS_LOB.WRITEAPPEND(l_blob, UTL_RAW.LENGTH(l_raw), l_raw);
+                END LOOP;
+
+                :out_blob := l_blob;
+            END;";
+
+        _input.CommandType = OracleCommandType.Command;
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.Parameters,
+            OutputParameters = new[]
+            {
+            new OutputParameter
+            {
+                Name = "out_blob",
+                DataType = ProcedureParameterType.Blob,
+                Size = 1000000
+            }
+        }
+        };
+
+        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        ClassicAssert.IsTrue(result.Success);
+
+        var dict = (Dictionary<string, object>)result.Output;
+        var base64 = dict["out_blob"] as string;
+
+        ClassicAssert.IsNotNull(base64);
+
+        byte[] decoded = Convert.FromBase64String(base64);
+
+        ClassicAssert.Greater(decoded.Length, expectedMinSize);
+        ClassicAssert.IsTrue(decoded.All(b => b == (byte)'A'));
+    }
+
 }
