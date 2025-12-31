@@ -8,22 +8,24 @@ using System.Collections.Generic;
 using System;
 
 namespace Frends.Oracle.ExecuteProcedure.Tests;
-// To run tests run docker-compose up -d
-// You will need free oracle account to download image
+
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
 
 [TestFixture]
 class UnitTests
 {
     private static Input _input;
     private static Options _options;
+    private static IContainer oracleContainer;
 
     private readonly static string schema = "test_user";
-    private readonly static string _connectionString = $"Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 51521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = {schema}; Password={schema};";
-    private readonly static string _connectionStringSys = "Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 51521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = sys; Password=mysecurepassword; DBA PRIVILEGE=SYSDBA";
+    private readonly static string _connectionString = $"Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = {schema}; Password={schema};";
+    private readonly static string _connectionStringSys = "Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = sys; Password=mysecurepassword; DBA PRIVILEGE=SYSDBA";
     private readonly static string _proc = "unitestproc";
 
     [OneTimeSetUp]
-    public void OneTimeSetup()
+    public async Task OneTimeSetup()
     {
         _input = new Input
         {
@@ -34,24 +36,44 @@ class UnitTests
         {
             ThrowErrorOnFailure = true,
             TimeoutSeconds = 30,
-            BindParameterByName = true
+            BindParameterByName = true,
         };
+
+        oracleContainer = new ContainerBuilder()
+            .WithImage("container-registry.oracle.com/database/express:18.4.0-xe")
+            .WithName("Frends.Oracle.ExecuteProcedure.Tests")
+            .WithPortBinding(1521, 1521)
+            .WithEnvironment("ORACLE_PWD", "mysecurepassword")
+            .WithEnvironment("ORACLE_CHARACTERSET", "AL32UTF8")
+            // We need to wait for the container to be ready healthy.
+            // Health checks are running every 5 seconds, and it takes ~ 8 minutes to get the container ready.
+            // It gives us 120 retries + 30 as a margin. We will stop waiting after 10 minutes if it's still not ready.
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy(150, s => s.WithTimeout(TimeSpan.FromMinutes(10))))
+            .WithReuse(true)
+            .Build();
+
+        await oracleContainer.StartAsync();
 
         Helpers.TestConnectionBeforeRunningTests(_connectionStringSys);
 
-        using var con = new OracleConnection(_connectionStringSys);
+        await using var con = new OracleConnection(_connectionStringSys);
         con.Open();
         Helpers.CreateTestUser(con);
         con.Close();
     }
 
     [OneTimeTearDown]
-    public void OneTimeTearDown()
+    public async Task OneTimeTearDown()
     {
-        using var con = new OracleConnection(_connectionStringSys);
+        await using var con = new OracleConnection(_connectionStringSys);
         con.Open();
         Helpers.DropTestUser(con);
         con.Close();
+
+        if (oracleContainer != null)
+        {
+            await oracleContainer.DisposeAsync();
+        }
     }
 
     [SetUp]
@@ -59,12 +81,16 @@ class UnitTests
     {
         using var con = new OracleConnection(_connectionStringSys);
         con.Open();
+
         try
         {
             Helpers.CreateTestTable(con);
             Helpers.InsertTestData(con);
         }
-        finally { con.Close(); }
+        finally
+        {
+            con.Close();
+        }
     }
 
     [TearDown]
@@ -72,12 +98,16 @@ class UnitTests
     {
         using var con = new OracleConnection(_connectionStringSys);
         con.Open();
+
         try
         {
             Helpers.DropTestTable(con);
             Helpers.DropProcedure(con, _proc);
         }
-        finally { con.Close(); }
+        finally
+        {
+            con.Close();
+        }
     }
 
     [Test]
@@ -375,13 +405,13 @@ end {_proc};";
             DataReturnType = OracleCommandReturnType.Parameters,
             OutputParameters = new[]
             {
-            new OutputParameter
-            {
-                Name = "v_doc_rev",
-                DataType = ProcedureParameterType.NVarchar2,
-                Size = 50
+                new OutputParameter
+                {
+                    Name = "v_doc_rev",
+                    DataType = ProcedureParameterType.NVarchar2,
+                    Size = 50
+                }
             }
-        }
         };
 
         var result = await Oracle.ExecuteProcedure(input, output, _options, new CancellationToken());
@@ -419,12 +449,12 @@ end {_proc};";
             DataReturnType = OracleCommandReturnType.Parameters,
             OutputParameters = new[]
             {
-            new OutputParameter { Name = "v_file_data", DataType = ProcedureParameterType.Blob, Size = 90000000 },
-            new OutputParameter { Name = "v_file_type", DataType = ProcedureParameterType.Varchar2, Size = 100 },
-            new OutputParameter { Name = "v_doc_title", DataType = ProcedureParameterType.Varchar2, Size = 200 },
-            new OutputParameter { Name = "v_err_msg", DataType = ProcedureParameterType.Varchar2, Size = 1000 },
-            new OutputParameter { Name = "v_optional_field", DataType = ProcedureParameterType.Varchar2, Size = 100 }
-        }
+                new OutputParameter { Name = "v_file_data", DataType = ProcedureParameterType.Blob, Size = 90000000 },
+                new OutputParameter { Name = "v_file_type", DataType = ProcedureParameterType.Varchar2, Size = 100 },
+                new OutputParameter { Name = "v_doc_title", DataType = ProcedureParameterType.Varchar2, Size = 200 },
+                new OutputParameter { Name = "v_err_msg", DataType = ProcedureParameterType.Varchar2, Size = 1000 },
+                new OutputParameter { Name = "v_optional_field", DataType = ProcedureParameterType.Varchar2, Size = 100 }
+            }
         };
 
         var options = new Options

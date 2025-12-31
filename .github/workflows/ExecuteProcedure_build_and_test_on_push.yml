@@ -14,7 +14,6 @@ jobs:
     uses: FrendsPlatform/FrendsTasks/.github/workflows/linux_build_test.yml@main
     with:
       workdir: Frends.Oracle.ExecuteProcedure
-      prebuild_command: chmod 777 ./_build/deploy_oracle_docker_container.sh && ./_build/deploy_oracle_docker_container.sh  
     secrets:
       badge_service_api_key: ${{ secrets.BADGE_SERVICE_API_KEY }}
       test_feed_api_key: ${{ secrets.TASKS_TEST_FEED_API_KEY }}
