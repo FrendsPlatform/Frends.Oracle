@@ -158,7 +158,7 @@ public static class Oracle
                 {
                     var invalidValue = reader.GetString(i);
 
-                    throw new InvalidCastException($"Value: {invalidValue}, couldn't be properly formated", e);
+                    throw new InvalidCastException($"Value: {invalidValue}, couldn't be properly formatted", e);
                 }
             }
 
