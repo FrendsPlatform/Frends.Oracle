@@ -1,12 +1,10 @@
 ﻿using Oracle.ManagedDataAccess.Client;
 using System.Data;
-using System.Data.Common;
 using System.ComponentModel;
 using System.Globalization;
 using Frends.Oracle.ExecuteQuery.Definitions;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
-using Oracle.ManagedDataAccess.Types;
 
 namespace Frends.Oracle.ExecuteQuery;
 
@@ -16,21 +14,22 @@ namespace Frends.Oracle.ExecuteQuery;
 public static class Oracle
 {
     /// <summary>
-    /// Task for performing queries in Oracle database.
+    /// Task for performing queries in an Oracle database.
     /// [Documentation](https://tasks.frends.com/tasks/frends-tasks/Frends.Oracle.ExecuteQuery)
     /// </summary>
     /// <param name="input">Properties for the query to be executed</param>
     /// <param name="options">Task options</param>
     /// <param name="cancellationToken">CancellationToken is given by Frends UI</param>
     /// <returns>Object { bool Success, string Message, JToken.JObject[] Output }</returns>
-    public static async Task<Result> ExecuteQuery([PropertyTab] Input input, [PropertyTab] Options options, CancellationToken cancellationToken)
+    public static async Task<Result> ExecuteQuery([PropertyTab] Input input, [PropertyTab] Options options,
+        CancellationToken cancellationToken)
     {
         try
         {
-            using OracleConnection con = new OracleConnection(input.ConnectionString);
+            await using OracleConnection con = new OracleConnection(input.ConnectionString);
             await con.OpenAsync(cancellationToken);
-            using var transaction = con.BeginTransaction(GetIsolationLevel(options.OracleIsolationLevel));
-            using var command = con.CreateCommand();
+            await using var transaction = con.BeginTransaction(GetIsolationLevel(options.OracleIsolationLevel));
+            await using var command = con.CreateCommand();
 
             command.Transaction = transaction;
             command.CommandTimeout = options.TimeoutSeconds;
@@ -38,12 +37,11 @@ public static class Oracle
             command.BindByName = options.BindParameterByName;
 
             if (input.Parameters != null)
-                command.Parameters.AddRange(input.Parameters.Select(p => CreateOracleParameter(p)).ToArray());
+                command.Parameters.AddRange(input.Parameters.Select(CreateOracleParameter).ToArray());
+
             try
             {
                 Result result;
-                JToken dataObject;
-                DbDataReader dataReader;
                 int rows;
 
                 switch (input.ExecuteType)
@@ -52,39 +50,48 @@ public static class Oracle
                         // Execute query
                         if (input.Query.ToLower().StartsWith("select"))
                         {
-                            dataReader = await command.ExecuteReaderAsync(cancellationToken);
-                            dataObject = dataReader.ToJson(cancellationToken);
-                            result = new Result(true, "Success", dataObject);
-                            break;
+                            var jToken = await ToJTokenAsync(command, options, cancellationToken);
+                            result = new Result(true, "Success", jToken);
                         }
                         else
                         {
                             rows = await command.ExecuteNonQueryAsync(cancellationToken);
                             await transaction.CommitAsync(cancellationToken);
                             result = new Result(true, "Success", JToken.FromObject(new { AffectedRows = rows }));
-                            break;
                         }
+
+                        break;
                     case ExecuteTypes.NonQuery:
                         rows = await command.ExecuteNonQueryAsync(cancellationToken);
                         await transaction.CommitAsync(cancellationToken);
-                        result = new Result(true, "Success", JToken.FromObject(new { AffectedRows = rows }));
+                        result = new Result(true, "Success", JToken.FromObject(new
+                        {
+                            AffectedRows = rows
+                        }));
+
                         break;
                     case ExecuteTypes.ExecuteReader:
-                        var jToken = await ToJTokenAsync(command, cancellationToken);
-                        result = new Result(true, "Success", jToken);
-                        break;
+                        {
+                            var jToken = await ToJTokenAsync(command, options, cancellationToken);
+                            result = new Result(true, "Success", jToken);
+
+                            break;
+                        }
                     case ExecuteTypes.Scalar:
                         var scalarResult = await command.ExecuteScalarAsync(cancellationToken);
                         result = new Result(true, "Success", scalarResult ?? string.Empty);
+
                         break;
                     default:
                         throw new NotSupportedException();
                 }
+
                 return result;
             }
             catch (Exception ex)
             {
                 transaction.Rollback();
+
                 if (options.ThrowErrorOnFailure)
                     throw;
 
@@ -93,7 +100,6 @@ public static class Oracle
             finally
             {
                 await con.CloseAsync();
-                con.Dispose();
             }
         }
         catch (Exception ex)
@@ -109,61 +115,59 @@ public static class Oracle
         }
     }
 
-    private static async Task<JToken> ToJTokenAsync(OracleCommand command, CancellationToken cancellationToken)
+    private static async Task<JToken> ToJTokenAsync(OracleCommand command, Options options,
+        CancellationToken cancellationToken)
     {
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken) as OracleDataReader;
-        var culture = CultureInfo.InvariantCulture;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        reader.SuppressGetDecimalInvalidCastException = options.EnableSafeNumericMapping;
 
-        // Create json result.
-        using JsonWriter writer = new JTokenWriter();
+        await using var writer = new JTokenWriter();
         writer.Formatting = Formatting.Indented;
-        writer.Culture = culture;
+        writer.Culture = CultureInfo.InvariantCulture;
 
-        // Start array.
-        await writer.WriteStartArrayAsync(cancellationToken);
+        await writer.WriteStartArrayAsync(cancellationToken).ConfigureAwait(false);
 
-        while (reader.Read())
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            // Start row object.
-            await writer.WriteStartObjectAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await writer.WriteStartObjectAsync(cancellationToken).ConfigureAwait(false);
 
             for (var i = 0; i < reader.FieldCount; i++)
             {
-                // Add row element name.
-                await writer.WritePropertyNameAsync(reader.GetName(i), cancellationToken);
+                await writer.WritePropertyNameAsync(reader.GetName(i), cancellationToken).ConfigureAwait(false);
 
-                // Add row element value.
-                switch (reader.GetDataTypeName(i))
+                try
                 {
-                    case "Decimal":
-                        // FCOM-204 fix; proper handling of decimal values and NULL values in decimal type fields.
-                        var v = reader.GetOracleDecimal(i);
-                        var fieldValue = OracleDecimal.SetPrecision(v, 28);
+                    switch (reader.GetDataTypeName(i))
+                    {
+                        case "Date":
+                        case "TimeStamp":
+                        case "TimeStampLTZ":
+                        case "TimeStampTZ":
+                            string dateString = reader.GetValue(i).ToString();
+                            await writer.WriteValueAsync(dateString, cancellationToken).ConfigureAwait(false);
 
-                        if (!fieldValue.IsNull) await writer.WriteValueAsync((decimal)fieldValue, cancellationToken);
-                        else await writer.WriteValueAsync(string.Empty, cancellationToken);
-                        break;
-                    case "Date":
-                    case "TimeStamp":
-                    case "TimeStampLTZ":
-                    case "TimeStampTZ":
-                        string dateString = reader.GetValue(i).ToString();
-                        await writer.WriteValueAsync(dateString, cancellationToken);
-                        break;
-                    default:
-                        await writer.WriteValueAsync(reader.GetValue(i) ?? string.Empty, cancellationToken);
-                        break;
+                            break;
+                        default:
+                            await writer.WriteValueAsync(reader.GetValue(i), cancellationToken).ConfigureAwait(false);
+
+                            break;
+                    }
+                }
+                catch (Exception e)
+                {
+                    var invalidValue = reader.GetString(i);
+
+                    throw new InvalidCastException($"Value: {invalidValue}, couldn't be properly formated", e);
                 }
             }
-            cancellationToken.ThrowIfCancellationRequested();
-            // End row object.
-            await writer.WriteEndObjectAsync(cancellationToken);
+
+            await writer.WriteEndObjectAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        // End array.
-        await writer.WriteEndArrayAsync(cancellationToken);
+        await writer.WriteEndArrayAsync(cancellationToken).ConfigureAwait(false);
 
-        return ((JTokenWriter)writer).Token;
+        return writer.Token;
     }
 
     private static OracleParameter CreateOracleParameter(QueryParameter parameter)
@@ -176,31 +180,6 @@ public static class Oracle
         };
     }
 
-    private static JToken ToJson(this DbDataReader reader, CancellationToken cancellationToken)
-    {
-        using var writer = new JTokenWriter();
-        writer.Formatting = Formatting.Indented;
-        writer.Culture = CultureInfo.InvariantCulture;
-
-        writer.WriteStartArray();
-
-        while (reader.Read())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            writer.WriteStartObject();
-            for (var i = 0; i < reader.FieldCount; i++)
-            {
-                writer.WritePropertyName(reader.GetName(i));
-
-                writer.WriteValue(reader.GetValue(i) ?? string.Empty);
-            }
-            writer.WriteEndObject();
-        }
-
-        writer.WriteEndArray();
-        return writer.Token;
-    }
-
     private static IsolationLevel GetIsolationLevel(TransactionIsolationLevel level)
     {
         return level switch
@@ -210,7 +189,6 @@ public static class Oracle
             TransactionIsolationLevel.RepeatableRead => IsolationLevel.RepeatableRead,
             TransactionIsolationLevel.Serializable => IsolationLevel.Serializable,
             TransactionIsolationLevel.ReadUncommitted => IsolationLevel.ReadUncommitted,
-            TransactionIsolationLevel.Default => IsolationLevel.Serializable,
             _ => IsolationLevel.Serializable,
         };
     }

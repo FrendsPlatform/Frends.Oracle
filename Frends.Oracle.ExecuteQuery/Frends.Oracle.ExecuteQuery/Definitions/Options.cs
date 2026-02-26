@@ -8,8 +8,8 @@ namespace Frends.Oracle.ExecuteQuery.Definitions;
 public class Options
 {
     /// <summary>
-    /// Choose if error should be thrown if Task failes.
-    /// Otherwise returns Object { Success = false }
+    /// Choose if an error should be thrown if the Task fails.
+    /// Otherwise, returns Object { Success = false }
     /// </summary>
     /// <example>true</example>
     [DefaultValue(true)]
@@ -44,5 +44,13 @@ public class Options
     /// <example>true</example>
     [DefaultValue(true)]
     public bool BindParameterByName { get; set; }
-}
 
+    /// <summary>
+    /// When true, attempts to safely map high-precision Oracle numbers to .NET types
+    /// by rounding the scale.  (Oracle can store up to 38 digits, while .NET only 29)
+    /// Note: Whole numbers exceeding 29 digits may still fail
+    /// </summary>
+    /// <example>false</example>
+    [DefaultValue(false)]
+    public bool EnableSafeNumericMapping { get; set; }
+}
