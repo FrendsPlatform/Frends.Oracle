@@ -129,7 +129,7 @@ class TestClass
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result.Success, Is.False);
-        Assert.That(result.Message.Contains("couldn't be properly formated"), Is.True);
+        Assert.That(result.Message.Contains("couldn't be properly formatted"), Is.True);
     }
 
     [Test]
@@ -144,7 +144,7 @@ class TestClass
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result.Success, Is.False);
-        Assert.That(result.Message.Contains("couldn't be properly formated"), Is.True);
+        Assert.That(result.Message.Contains("couldn't be properly formatted"), Is.True);
     }
 
     [Test]
