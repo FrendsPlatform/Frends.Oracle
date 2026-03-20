@@ -6,6 +6,7 @@ using Oracle.ManagedDataAccess.Client;
 using NUnit.Framework.Legacy;
 using System.Collections.Generic;
 using System;
+using System.Diagnostics;
 
 namespace Frends.Oracle.ExecuteProcedure.Tests;
 
@@ -21,8 +22,13 @@ class UnitTests
     private static IContainer oracleContainer;
 
     private readonly static string schema = "test_user";
-    private readonly static string _connectionString = $"Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = {schema}; Password={schema};";
-    private readonly static string _connectionStringSys = "Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = sys; Password=mysecurepassword; DBA PRIVILEGE=SYSDBA";
+
+    private readonly static string _connectionString =
+        $"Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = {schema}; Password={schema};";
+
+    private readonly static string _connectionStringSys =
+        "Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = sys; Password=mysecurepassword; DBA PRIVILEGE=SYSDBA";
+
     private readonly static string _proc = "unitestproc";
 
     [OneTimeSetUp]
@@ -49,7 +55,8 @@ class UnitTests
             // We need to wait for the container to be ready healthy.
             // Health checks are running every 5 seconds, and it takes ~ 8 minutes to get the container ready.
             // It gives us 120 retries + 30 as a margin. We will stop waiting after 10 minutes if it's still not ready.
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy(150, s => s.WithTimeout(TimeSpan.FromMinutes(10))))
+            .WithWaitStrategy(Wait.ForUnixContainer()
+                .UntilContainerIsHealthy(150, s => s.WithTimeout(TimeSpan.FromMinutes(10))))
             .WithReuse(true)
             .Build();
 
@@ -436,7 +443,7 @@ end {_proc};";
                 :v_file_type := 'PDF';
                 :v_doc_title := 'Sales_Report.pdf';
                 :v_err_msg := NULL;
-                
+
                 -- Additional test: some NULLs
                 :v_optional_field := NULL;
             END;",
@@ -450,11 +457,36 @@ end {_proc};";
             DataReturnType = OracleCommandReturnType.Parameters,
             OutputParameters = new[]
             {
-                new OutputParameter { Name = "v_file_data", DataType = ProcedureParameterType.Blob, Size = 90000000 },
-                new OutputParameter { Name = "v_file_type", DataType = ProcedureParameterType.Varchar2, Size = 100 },
-                new OutputParameter { Name = "v_doc_title", DataType = ProcedureParameterType.Varchar2, Size = 200 },
-                new OutputParameter { Name = "v_err_msg", DataType = ProcedureParameterType.Varchar2, Size = 1000 },
-                new OutputParameter { Name = "v_optional_field", DataType = ProcedureParameterType.Varchar2, Size = 100 }
+                new OutputParameter
+                {
+                    Name = "v_file_data",
+                    DataType = ProcedureParameterType.Blob,
+                    Size = 90000000
+                },
+                new OutputParameter
+                {
+                    Name = "v_file_type",
+                    DataType = ProcedureParameterType.Varchar2,
+                    Size = 100
+                },
+                new OutputParameter
+                {
+                    Name = "v_doc_title",
+                    DataType = ProcedureParameterType.Varchar2,
+                    Size = 200
+                },
+                new OutputParameter
+                {
+                    Name = "v_err_msg",
+                    DataType = ProcedureParameterType.Varchar2,
+                    Size = 1000
+                },
+                new OutputParameter
+                {
+                    Name = "v_optional_field",
+                    DataType = ProcedureParameterType.Varchar2,
+                    Size = 100
+                }
             }
         };
 
@@ -512,13 +544,13 @@ end {_proc};";
             DataReturnType = OracleCommandReturnType.Parameters,
             OutputParameters = new[]
             {
-            new OutputParameter
-            {
-                Name = "out_blob",
-                DataType = ProcedureParameterType.Blob,
-                Size = 1000000
+                new OutputParameter
+                {
+                    Name = "out_blob",
+                    DataType = ProcedureParameterType.Blob,
+                    Size = 1000000
+                }
             }
-        }
         };
 
         var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
@@ -533,6 +565,138 @@ end {_proc};";
 
         ClassicAssert.Greater(decoded.Length, expectedMinSize);
         ClassicAssert.IsTrue(decoded.All(b => b == (byte)'A'));
+    }
+
+    [Test]
+    public async Task ExecuteProcedure_ClearConnectionPools_SpeedUp_MultipleCalls()
+    {
+        _input.Command = @$"
+create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+begin
+  select address into address from workers where name = name;
+end {_proc};";
+        _input.CommandType = OracleCommandType.Command;
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.AffectedRows
+        };
+        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        Assert.That(result.Success);
+
+        _input.Command = _proc;
+        _input.CommandType = OracleCommandType.StoredProcedure;
+        _input.Parameters = new InputParameter[]
+        {
+            new()
+            {
+                Name = "name",
+                Value = "risto",
+                DataType = ProcedureParameterType.Varchar2,
+                Size = 255
+            }
+        };
+        output.OutputParameters = new OutputParameter[]
+        {
+            new()
+            {
+                Name = "address",
+                DataType = ProcedureParameterType.Varchar2,
+                Size = 255
+            }
+        };
+        const int numberOfCalls = 100;
+
+        _options.ClearConnectionPools = false;
+        long totalTimeForFalse = 0;
+
+        for (int i = 0; i < numberOfCalls; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+            sw.Stop();
+            totalTimeForFalse += sw.ElapsedMilliseconds;
+        }
+
+        _options.ClearConnectionPools = true;
+        long totalTimeForTrue = 0;
+
+        for (int i = 0; i < numberOfCalls; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+            sw.Stop();
+            totalTimeForTrue += sw.ElapsedMilliseconds;
+        }
+
+        var averageTimeForFalse = totalTimeForFalse / numberOfCalls;
+        var averageTimeForTrue = totalTimeForTrue / numberOfCalls;
+        TestContext.WriteLine($"Average execution time for ClearConnectionPools set to True = {averageTimeForTrue} ms");
+        TestContext.WriteLine(
+            $"Average execution time for ClearConnectionPools set to False = {averageTimeForFalse} ms");
+        TestContext.WriteLine(
+            $"Total difference for {numberOfCalls} calls = {totalTimeForTrue - totalTimeForFalse} ms");
+        Assert.That(totalTimeForFalse, Is.LessThan(totalTimeForTrue));
+
+
+        //last call to clear connection pools for TearDown to work
+        _options.ClearConnectionPools = true;
+        await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+    }
+
+    [Test]
+    public async Task ExecuteProcedure_CloseConnection_SetToFalse_ShouldLeaveConnectionOpen()
+    {
+        _input.Command = @$"
+create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+begin
+  select address into address from workers where name = name;
+end {_proc};";
+        _input.CommandType = OracleCommandType.Command;
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.AffectedRows
+        };
+
+        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        Assert.That(result.Success);
+
+        _input.Command = _proc;
+        _input.CommandType = OracleCommandType.StoredProcedure;
+        _input.Parameters = new InputParameter[]
+        {
+            new()
+            {
+                Name = "name",
+                Value = "risto",
+                DataType = ProcedureParameterType.Varchar2,
+                Size = 255
+            }
+        };
+        output.OutputParameters = new OutputParameter[]
+        {
+            new()
+            {
+                Name = "address",
+                DataType = ProcedureParameterType.Varchar2,
+                Size = 255
+            }
+        };
+
+        _options.CloseConnection = false;
+        await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+
+        await using var con = new OracleConnection(_connectionStringSys);
+        await con.OpenAsync();
+        var ex = Assert.Throws<OracleException>(() => Helpers.DropTestUser(con));
+        Assert.That(ex, Is.Not.Null);
+        Assert.That(ex.Message, Does.Contain("ORA-01940"),
+            "Expected ORA-01940 error indicating user is still in use.");
+
+        //last call to close connection for TearDown to work
+        _options.CloseConnection = true;
+        await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
     }
 
 }

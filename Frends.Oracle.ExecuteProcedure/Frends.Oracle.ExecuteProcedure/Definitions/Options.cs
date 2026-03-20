@@ -29,5 +29,21 @@ public class Options
     /// <example>true</example>
     [DefaultValue(true)]
     public bool BindParameterByName { get; set; }
-}
 
+    /// <summary>
+    /// Choose to clear connection pools after execution.
+    /// This is an internal Oracle setting to clear cached connections.
+    /// </summary>
+    /// <example>true</example>
+    [DefaultValue(true)]
+    public bool ClearConnectionPools { get; set; } = true;
+
+    /// <summary>
+    /// Choose to close the created connection after execution.
+    /// Setting this to false will allow the connection to be reused
+    /// but can cause issues with left open connections or concurrent usage if not handled properly.
+    /// </summary>
+    /// <example>true</example>
+    [DefaultValue(true)]
+    public bool CloseConnection { get; set; } = true;
+}

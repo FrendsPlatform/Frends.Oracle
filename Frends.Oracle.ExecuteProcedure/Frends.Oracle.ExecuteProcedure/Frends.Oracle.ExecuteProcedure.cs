@@ -1,4 +1,5 @@
-﻿using Oracle.ManagedDataAccess.Client;
+﻿using System.Collections.Concurrent;
+using Oracle.ManagedDataAccess.Client;
 using OracleParam = Oracle.ManagedDataAccess.Client.OracleParameter;
 using System.ComponentModel;
 using Frends.Oracle.ExecuteProcedure.Definitions;
@@ -13,6 +14,8 @@ namespace Frends.Oracle.ExecuteProcedure;
 /// </summary>
 public class Oracle
 {
+    private static readonly ConcurrentDictionary<string, Lazy<OracleConnection>> LazyConnectionCache = new();
+
     /// <summary>
     /// Task for performing stored procedures in Oracle database.
     /// [Documentation](https://tasks.frends.com/tasks/frends-tasks/Frends.Oracle.ExecuteProcedure)
@@ -22,28 +25,38 @@ public class Oracle
     /// <param name="options">Task options</param>
     /// <param name="cancellationToken">CancellationToken is given by Frends UI</param>
     /// <returns>Object { bool Success, int RowsAffected, IEnumerable Output }</returns>
-    public async static Task<Result> ExecuteProcedure([PropertyTab] Input input, [PropertyTab] Output output, [PropertyTab] Options options, CancellationToken cancellationToken)
+    public static async Task<Result> ExecuteProcedure([PropertyTab] Input input, [PropertyTab] Output output,
+        [PropertyTab] Options options, CancellationToken cancellationToken)
     {
-        IEnumerable<OracleParam> outputOracleParams = null;
-        int rowsAffected = 0;
-        using OracleConnection con = new OracleConnection(input.ConnectionString);
+        var con = GetLazyConnection(input.ConnectionString);
+        await using var command = new OracleCommand();
 
         try
         {
-            await con.OpenAsync(cancellationToken);
+            try
+            {
+                await con.OpenAsync(cancellationToken);
+            }
+            catch (Exception e)
+            {
+                //ORA-50005 => Connection already opened
+                if (!e.Message.Contains("ORA-50005")) throw;
+            }
 
-            using var command = new OracleCommand();
             command.Connection = con;
             command.CommandText = input.Command;
             command.CommandTimeout = options.TimeoutSeconds;
-            command.CommandType = (input.CommandType == OracleCommandType.Command) ? CommandType.Text : CommandType.StoredProcedure;
+            command.CommandType = (input.CommandType == OracleCommandType.Command)
+                ? CommandType.Text
+                : CommandType.StoredProcedure;
 
             // Add input parameters to the OracleCommand
             if (input.Parameters != null)
                 command.Parameters.AddRange(input.Parameters.Select(p => CreateOracleInputParameter(p)).ToArray());
 
             if (output.OutputParameters != null)
-                command.Parameters.AddRange(output.OutputParameters.Select(x => CreateOracleOutputParameter(x)).ToArray());
+                command.Parameters.AddRange(output.OutputParameters.Select(x => CreateOracleOutputParameter(x))
+                    .ToArray());
 
             command.BindByName = options.BindParameterByName;
 
@@ -57,9 +70,9 @@ public class Oracle
                 return new Result(runCommand.Exception.Message);
             }
 
-            rowsAffected = await runCommand;
+            var rowsAffected = await runCommand;
 
-            outputOracleParams = command.Parameters.Cast<OracleParam>()
+            var outputOracleParams = command.Parameters.Cast<OracleParam>()
                 .Where(p => p.Direction == ParameterDirection.Output);
 
             var outputDict = outputOracleParams
@@ -67,11 +80,6 @@ public class Oracle
                     p => p.ParameterName,
                     p => GetOracleParameterValue(p)
                 );
-
-            command.Dispose();
-
-            await con.CloseAsync();
-            con.Dispose();
 
             if (output.DataReturnType == OracleCommandReturnType.AffectedRows)
                 return new Result(true, rowsAffected);
@@ -81,8 +89,8 @@ public class Oracle
             }
 
             var result = HandleDataset(outputOracleParams, output);
-            return new Result(true, result);
 
+            return new Result(true, result);
         }
         catch (Exception ex)
         {
@@ -93,8 +101,16 @@ public class Oracle
         }
         finally
         {
-            await con.CloseAsync();
-            OracleConnection.ClearAllPools();
+            if (options.CloseConnection)
+            {
+                await con.CloseAsync();
+                con.Dispose();
+                LazyConnectionCache.TryRemove(input.ConnectionString, out _);
+            }
+            if (options.ClearConnectionPools)
+            {
+                OracleConnection.ClearAllPools();
+            }
         }
     }
 
@@ -130,21 +146,26 @@ public class Oracle
         outputOracleParams.ToList().ForEach(p => root.Add(ParameterToXElement(p)));
 
         dynamic commandResult;
+
         // Affected rows are handled above!
         switch (output.DataReturnType)
         {
             case OracleCommandReturnType.JSONString:
                 commandResult = JsonConvert.SerializeXNode(xDoc, Formatting.None, true);
+
                 break;
             case OracleCommandReturnType.XDocument:
                 commandResult = xDoc;
+
                 break;
             case OracleCommandReturnType.XmlString:
                 commandResult = xDoc.ToString();
+
                 break;
             default:
                 throw new Exception("Unsupported DataReturnType.");
         }
+
         return commandResult;
     }
 
@@ -152,6 +173,7 @@ public class Oracle
     {
         var xelem = new XElement(parameter.ParameterName);
         var value = GetOracleParameterValue(parameter);
+
         if (value == null)
             return xelem;
         xelem.Value = value.ToString();
@@ -177,6 +199,7 @@ public class Oracle
             _ => p.Value
         };
     }
+
     private static string BlobToBase64(global::Oracle.ManagedDataAccess.Types.OracleBlob blob)
     {
         if (blob == null || blob.IsNull || blob.Length == 0)
@@ -201,6 +224,20 @@ public class Oracle
         }
 
         return Convert.ToBase64String(ms.ToArray());
+    }
+
+    private static OracleConnection GetLazyConnection(string connectionString)
+    {
+        var con = LazyConnectionCache.GetOrAdd(connectionString, _ =>
+        {
+            return new Lazy<OracleConnection>(() =>
+            {
+                var connection = new OracleConnection(connectionString);
+                return connection;
+            });
+        });
+
+        return con.Value;
     }
 
 }
