@@ -581,7 +581,31 @@ end {_proc};";
         {
             DataReturnType = OracleCommandReturnType.AffectedRows
         };
-        int numberOfCalls = 100;
+        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        Assert.That(result.Success);
+
+        _input.Command = _proc;
+        _input.CommandType = OracleCommandType.StoredProcedure;
+        _input.Parameters = new InputParameter[]
+        {
+            new()
+            {
+                Name = "name",
+                Value = "risto",
+                DataType = ProcedureParameterType.Varchar2,
+                Size = 255
+            }
+        };
+        output.OutputParameters = new OutputParameter[]
+        {
+            new()
+            {
+                Name = "address",
+                DataType = ProcedureParameterType.Varchar2,
+                Size = 255
+            }
+        };
+        const int numberOfCalls = 100;
 
         _options.ClearConnectionPools = false;
         long totalTimeForFalse = 0;
@@ -633,6 +657,31 @@ end {_proc};";
         var output = new Output
         {
             DataReturnType = OracleCommandReturnType.AffectedRows
+        };
+
+        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        Assert.That(result.Success);
+
+        _input.Command = _proc;
+        _input.CommandType = OracleCommandType.StoredProcedure;
+        _input.Parameters = new InputParameter[]
+        {
+            new()
+            {
+                Name = "name",
+                Value = "risto",
+                DataType = ProcedureParameterType.Varchar2,
+                Size = 255
+            }
+        };
+        output.OutputParameters = new OutputParameter[]
+        {
+            new()
+            {
+                Name = "address",
+                DataType = ProcedureParameterType.Varchar2,
+                Size = 255
+            }
         };
 
         _options.CloseConnection = false;
