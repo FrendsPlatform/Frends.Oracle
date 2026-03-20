@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Data;
 using System.Threading;
-using System.Linq;
 using Oracle.ManagedDataAccess.Client;
 
 namespace Frends.Oracle.ExecuteProcedure.Tests;
@@ -9,7 +8,7 @@ namespace Frends.Oracle.ExecuteProcedure.Tests;
 internal static class Helpers
 {
     /// <summary>
-    /// This methods waits for the docker container to be ready. 
+    /// This methods waits for the docker container to be ready.
     /// Method tests connection 20 times and if connection can't be made, it waits for a minute after every attempt
     /// and tries again. This is needed for the CI for it to wait for the container to be ready.
     /// </summary>
@@ -26,6 +25,7 @@ internal static class Helpers
                 using var con = new OracleConnection(connectionString);
                 con.Open();
                 success = true;
+
                 break;
             }
             catch
@@ -43,7 +43,8 @@ internal static class Helpers
         using var cmd = con.CreateCommand();
         cmd.CommandType = CommandType.Text;
 
-        cmd.CommandText = @"CREATE TABLE test_user.workers(id NUMBER, name VARCHAR2(100) NULL, address VARCHAR2(100) NULL, PRIMARY KEY(id))";
+        cmd.CommandText =
+            @"CREATE TABLE test_user.workers(id NUMBER, name VARCHAR2(100) NULL, address VARCHAR2(100) NULL, PRIMARY KEY(id))";
         cmd.ExecuteNonQuery();
     }
 
@@ -108,6 +109,7 @@ end;";
 begin
   p_create_user('test_user');
 end;";
+
         try
         {
             cmd.ExecuteNonQuery();
@@ -127,4 +129,3 @@ end;";
         cmd.ExecuteNonQuery();
     }
 }
-
