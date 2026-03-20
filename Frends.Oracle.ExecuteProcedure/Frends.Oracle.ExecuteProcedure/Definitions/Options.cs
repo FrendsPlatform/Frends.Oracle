@@ -40,8 +40,8 @@ public class Options
 
     /// <summary>
     /// Choose to close the created connection after execution.
-    /// Setting this to false will allow the connection to be reused,
-    /// but can cause issues with left open connections if not handled properly.
+    /// Setting this to false will allow the connection to be reused
+    /// but can cause issues with left open connections or concurrent usage if not handled properly.
     /// </summary>
     /// <example>true</example>
     [DefaultValue(true)]
