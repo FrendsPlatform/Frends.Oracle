@@ -28,90 +28,155 @@ public class Oracle
     public static async Task<Result> ExecuteProcedure([PropertyTab] Input input, [PropertyTab] Output output,
         [PropertyTab] Options options, CancellationToken cancellationToken)
     {
-        var con = GetLazyConnection(input.ConnectionString);
-        await using var command = new OracleCommand();
+        const int maxAttempts = 2;
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            OracleConnection con = null;
+
+            try
+            {
+                con = await GetOrCreateConnectionAsync(input.ConnectionString, cancellationToken, forceNew: attempt > 1);
+                await using var command = new OracleCommand();
+
+                command.Connection = con;
+                command.CommandText = input.Command;
+                command.CommandTimeout = options.TimeoutSeconds;
+                command.CommandType = (input.CommandType == OracleCommandType.Command)
+                    ? CommandType.Text
+                    : CommandType.StoredProcedure;
+
+                if (input.Parameters != null)
+                    command.Parameters.AddRange(input.Parameters.Select(p => CreateOracleInputParameter(p)).ToArray());
+
+                if (output.OutputParameters != null)
+                    command.Parameters.AddRange(output.OutputParameters.Select(x => CreateOracleOutputParameter(x))
+                        .ToArray());
+
+                command.BindByName = options.BindParameterByName;
+
+                var runCommand = command.ExecuteNonQueryAsync(cancellationToken);
+
+                if (runCommand.IsFaulted)
+                {
+                    if (options.ThrowErrorOnFailure)
+                        throw new Exception(runCommand.Exception.Message);
+
+                    return new Result(runCommand.Exception.Message);
+                }
+
+                var rowsAffected = await runCommand;
+
+                var outputOracleParams = command.Parameters.Cast<OracleParam>()
+                    .Where(p => p.Direction == ParameterDirection.Output);
+
+                var outputDict = outputOracleParams
+                    .ToDictionary(
+                        p => p.ParameterName,
+                        p => GetOracleParameterValue(p)
+                    );
+
+                if (output.DataReturnType == OracleCommandReturnType.AffectedRows)
+                    return new Result(true, rowsAffected);
+                else if (output.DataReturnType == OracleCommandReturnType.Parameters)
+                {
+                    return new Result(true, outputDict);
+                }
+
+                var result = HandleDataset(outputOracleParams, output);
+
+                return new Result(true, result);
+            }
+            catch (Exception ex)
+            {
+                lastException = ex;
+
+                // Retry once if it's a stale connection error on first attempt
+                if (attempt < maxAttempts && IsStaleConnectionException(ex))
+                {
+                    LazyConnectionCache.TryRemove(input.ConnectionString, out _);
+                    OracleConnection.ClearAllPools();
+                    continue;
+                }
+
+                if (options.ThrowErrorOnFailure)
+                    throw new ArgumentException("Error when executing command:", ex.Message);
+
+                return new Result(false, ex.Message);
+            }
+            finally
+            {
+                if (con != null)
+                {
+                    if (options.CloseConnection)
+                    {
+                        await con.CloseAsync();
+                        con.Dispose();
+                        LazyConnectionCache.TryRemove(input.ConnectionString, out _);
+                    }
+                    if (options.ClearConnectionPools)
+                    {
+                        OracleConnection.ClearAllPools();
+                    }
+                }
+            }
+        }
+
+        if (options.ThrowErrorOnFailure)
+            throw new ArgumentException("Error when executing command:", lastException?.Message ?? "Unknown error");
+
+        return new Result(false, lastException?.Message ?? "Unknown error after retry");
+    }
+
+    private static async Task<OracleConnection> GetOrCreateConnectionAsync(string connectionString, CancellationToken cancellationToken, bool forceNew = false)
+    {
+        if (forceNew)
+        {
+            LazyConnectionCache.TryRemove(connectionString, out _);
+            OracleConnection.ClearAllPools();
+        }
+
+        var con = GetLazyConnection(connectionString);
 
         try
         {
-            try
-            {
+            if (con.State != ConnectionState.Open)
                 await con.OpenAsync(cancellationToken);
-            }
-            catch (Exception e)
-            {
-                //ORA-50005 => Connection already opened
-                if (!e.Message.Contains("ORA-50005")) throw;
-            }
 
-            command.Connection = con;
-            command.CommandText = input.Command;
-            command.CommandTimeout = options.TimeoutSeconds;
-            command.CommandType = (input.CommandType == OracleCommandType.Command)
-                ? CommandType.Text
-                : CommandType.StoredProcedure;
-
-            // Add input parameters to the OracleCommand
-            if (input.Parameters != null)
-                command.Parameters.AddRange(input.Parameters.Select(p => CreateOracleInputParameter(p)).ToArray());
-
-            if (output.OutputParameters != null)
-                command.Parameters.AddRange(output.OutputParameters.Select(x => CreateOracleOutputParameter(x))
-                    .ToArray());
-
-            command.BindByName = options.BindParameterByName;
-
-            var runCommand = command.ExecuteNonQueryAsync(cancellationToken);
-
-            if (runCommand.IsFaulted)
-            {
-                if (options.ThrowErrorOnFailure)
-                    throw new Exception(runCommand.Exception.Message);
-
-                return new Result(runCommand.Exception.Message);
-            }
-
-            var rowsAffected = await runCommand;
-
-            var outputOracleParams = command.Parameters.Cast<OracleParam>()
-                .Where(p => p.Direction == ParameterDirection.Output);
-
-            var outputDict = outputOracleParams
-                .ToDictionary(
-                    p => p.ParameterName,
-                    p => GetOracleParameterValue(p)
-                );
-
-            if (output.DataReturnType == OracleCommandReturnType.AffectedRows)
-                return new Result(true, rowsAffected);
-            else if (output.DataReturnType == OracleCommandReturnType.Parameters)
-            {
-                return new Result(true, outputDict);
-            }
-
-            var result = HandleDataset(outputOracleParams, output);
-
-            return new Result(true, result);
+            return con;
         }
-        catch (Exception ex)
+        catch (OracleException oracleEx) when (oracleEx.Number == 50005)
         {
-            if (options.ThrowErrorOnFailure)
-                throw new ArgumentException("Error when executing command:", ex.Message);
-
-            return new Result(false, ex.Message);
+            // ORA-50005: Connection already opened - OK when caching
+            return con;
         }
-        finally
+        catch (Exception ex) when (IsStaleConnectionException(ex))
         {
-            if (options.CloseConnection)
-            {
-                await con.CloseAsync();
-                con.Dispose();
-                LazyConnectionCache.TryRemove(input.ConnectionString, out _);
-            }
-            if (options.ClearConnectionPools)
-            {
-                OracleConnection.ClearAllPools();
-            }
+            LazyConnectionCache.TryRemove(connectionString, out _);
+            OracleConnection.ClearAllPools();
+            
+            con = GetLazyConnection(connectionString);
+            await con.OpenAsync(cancellationToken);
+            return con;
         }
+    }
+
+    private static bool IsStaleConnectionException(Exception ex)
+    {
+        if (ex is not OracleException oracleEx)
+            return false;
+
+        // Connection lost errors - these indicate server restart or network failure
+        return oracleEx.Number is
+            3113 or  // ORA-03113: end-of-file on communication channel
+            3135 or  // ORA-03135: connection lost contact
+            1089 or  // ORA-01089: immediate shutdown in progress
+            1034 or  // ORA-01034: ORACLE not available
+            12514 or // ORA-12514: TNS:listener does not currently know of service
+            12541 or // ORA-12541: TNS:no listener
+            12537 or // ORA-12537: TNS:connection closed (added for network drops)
+            3114;    // ORA-03114: not connected to ORACLE (added for lost connections)
     }
 
     private static OracleParam CreateOracleInputParameter(InputParameter parameter)

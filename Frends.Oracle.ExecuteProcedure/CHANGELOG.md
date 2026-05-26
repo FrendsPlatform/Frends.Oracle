@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.5.0] - 2026-05-26
+
+### Fixed
+
+- Fixed issue where cached connections would fail after Oracle server restart by adding automatic retry logic to detect and recover from stale connections.
+
 ## [2.4.0] - 2026-03-20
 
 ### Fixed
