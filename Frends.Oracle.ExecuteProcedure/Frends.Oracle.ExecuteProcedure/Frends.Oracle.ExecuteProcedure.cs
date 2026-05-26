@@ -155,7 +155,7 @@ public class Oracle
         {
             LazyConnectionCache.TryRemove(connectionString, out _);
             OracleConnection.ClearAllPools();
-            
+
             con = GetLazyConnection(connectionString);
             await con.OpenAsync(cancellationToken);
             return con;
