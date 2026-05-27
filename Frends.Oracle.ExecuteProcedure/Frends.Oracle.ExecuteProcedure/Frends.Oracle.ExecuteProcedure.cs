@@ -1,11 +1,12 @@
-﻿using System.Collections.Concurrent;
-using Oracle.ManagedDataAccess.Client;
-using OracleParam = Oracle.ManagedDataAccess.Client.OracleParameter;
-using System.ComponentModel;
-using Frends.Oracle.ExecuteProcedure.Definitions;
-using System.Data;
-using System.Xml.Linq;
+﻿using Frends.Oracle.ExecuteProcedure.Definitions;
 using Newtonsoft.Json;
+using Oracle.ManagedDataAccess.Client;
+using System.Collections.Concurrent;
+using System.ComponentModel;
+using System.Data;
+using System.Diagnostics.CodeAnalysis;
+using System.Xml.Linq;
+using OracleParam = Oracle.ManagedDataAccess.Client.OracleParameter;
 
 namespace Frends.Oracle.ExecuteProcedure;
 
@@ -101,7 +102,7 @@ public class Oracle
                 }
 
                 if (options.ThrowErrorOnFailure)
-                    throw new ArgumentException("Error when executing command:", ex.Message);
+                    throw new Exception($"Error when executing command: {ex.Message}", ex);
 
                 return new Result(false, ex.Message);
             }
@@ -162,6 +163,7 @@ public class Oracle
         }
     }
 
+    [ExcludeFromCodeCoverage]
     private static bool IsStaleConnectionException(Exception ex)
     {
         if (ex is not OracleException oracleEx)

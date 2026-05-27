@@ -763,5 +763,15 @@ end {_proc};";
         ClassicAssert.IsTrue(result2.Success);
         var dict2 = (Dictionary<string, object>)result2.Output;
         ClassicAssert.AreEqual("haapatie 9", dict2["address"]);
+
+        var cleanupOptions = new Options
+        {
+            ThrowErrorOnFailure = false,
+            CloseConnection = true,
+            ClearConnectionPools = true
+        };
+
+        await Oracle.ExecuteProcedure(_input, output, cleanupOptions, CancellationToken.None);
+
     }
 }
