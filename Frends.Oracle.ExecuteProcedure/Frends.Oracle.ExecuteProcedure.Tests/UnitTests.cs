@@ -772,6 +772,45 @@ end {_proc};";
         };
 
         await Oracle.ExecuteProcedure(_input, output, cleanupOptions, CancellationToken.None);
+    }
 
+    [Test]
+    public async Task ExecuteProcedure_WithInvalidSql_ReturnsErrorWhenThrowErrorOnFailureFalse()
+    {
+        _input.Command = "INVALID SQL SYNTAX HERE";
+        _input.CommandType = OracleCommandType.Command;
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.AffectedRows
+        };
+
+        _options.ThrowErrorOnFailure = false;
+
+        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+
+        ClassicAssert.IsFalse(result.Success);
+        ClassicAssert.IsNotNull(result.Output);
+        ClassicAssert.IsTrue(result.Output.Contains("ORA-"));
+    }
+
+    [Test]
+    public void ExecuteProcedure_WithInvalidSql_ThrowsExceptionWhenThrowErrorOnFailureTrue()
+    {
+        _input.Command = "INVALID SQL SYNTAX HERE";
+        _input.CommandType = OracleCommandType.Command;
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.AffectedRows
+        };
+
+        _options.ThrowErrorOnFailure = true;
+
+        var ex = Assert.ThrowsAsync<Exception>(async () =>
+            await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None));
+
+        ClassicAssert.IsNotNull(ex);
+        ClassicAssert.IsTrue(ex.Message.Contains("Error when executing command"));
     }
 }
