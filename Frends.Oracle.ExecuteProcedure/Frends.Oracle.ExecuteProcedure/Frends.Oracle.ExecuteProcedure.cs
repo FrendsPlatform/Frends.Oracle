@@ -147,12 +147,7 @@ public class Oracle
         }
         catch (Exception ex) when (IsStaleConnectionException(ex))
         {
-            LazyConnectionCache.TryRemove(connectionString, out _);
-            OracleConnection.ClearAllPools();
-
-            con = GetLazyConnection(connectionString);
-            await con.OpenAsync(cancellationToken);
-            return con;
+            return await CreateFreshConnection(connectionString, cancellationToken);
         }
     }
 
@@ -319,6 +314,17 @@ public class Oracle
             return true;
         }
         return false;
+    }
+
+    [ExcludeFromCodeCoverage]
+    private static async Task<OracleConnection> CreateFreshConnection(string connectionString, CancellationToken cancellationToken)
+    {
+        LazyConnectionCache.TryRemove(connectionString, out _);
+        OracleConnection.ClearAllPools();
+
+        var con = GetLazyConnection(connectionString);
+        await con.OpenAsync(cancellationToken);
+        return con;
     }
 
 }
