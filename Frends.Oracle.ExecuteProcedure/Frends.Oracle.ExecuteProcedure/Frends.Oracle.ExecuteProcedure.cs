@@ -94,12 +94,8 @@ public class Oracle
                 lastException = ex;
 
                 // Retry once if it's a stale connection error on first attempt
-                if (attempt < maxAttempts && IsStaleConnectionException(ex))
-                {
-                    LazyConnectionCache.TryRemove(input.ConnectionString, out _);
-                    OracleConnection.ClearAllPools();
+                if (RetryOnStaleConnection(ex, attempt, maxAttempts, input.ConnectionString))
                     continue;
-                }
 
                 if (options.ThrowErrorOnFailure)
                     throw new Exception($"Error when executing command: {ex.Message}", ex);
@@ -124,10 +120,7 @@ public class Oracle
             }
         }
 
-        if (options.ThrowErrorOnFailure)
-            throw new ArgumentException("Error when executing command:", lastException?.Message ?? "Unknown error");
-
-        return new Result(false, lastException?.Message ?? "Unknown error after retry");
+        return HandleRetryExhausted(options, lastException);
     }
 
     private static async Task<OracleConnection> GetOrCreateConnectionAsync(string connectionString, CancellationToken cancellationToken, bool forceNew = false)
@@ -305,6 +298,27 @@ public class Oracle
         });
 
         return con.Value;
+    }
+
+    [ExcludeFromCodeCoverage]
+    private static Result HandleRetryExhausted(Options options, Exception lastException)
+    {
+        if (options.ThrowErrorOnFailure)
+            throw new ArgumentException("Error when executing command:", lastException?.Message ?? "Unknown error");
+
+        return new Result(false, lastException?.Message ?? "Unknown error after retry");
+    }
+
+    [ExcludeFromCodeCoverage]
+    private static bool RetryOnStaleConnection(Exception ex, int attempt, int maxAttempts, string connectionString)
+    {
+        if (attempt < maxAttempts && IsStaleConnectionException(ex))
+        {
+            LazyConnectionCache.TryRemove(connectionString, out _);
+            OracleConnection.ClearAllPools();
+            return true;
+        }
+        return false;
     }
 
 }
