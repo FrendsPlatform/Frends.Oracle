@@ -29,16 +29,14 @@ public class Oracle
     public static async Task<Result> ExecuteProcedure([PropertyTab] Input input, [PropertyTab] Output output,
         [PropertyTab] Options options, CancellationToken cancellationToken)
     {
-
-        if (options.ConnectionRetryAttempts < 1 || options.ConnectionRetryAttempts > 5)
+        if (options.ConnectionRetryAttempts < 0 || options.ConnectionRetryAttempts > 4)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(options.ConnectionRetryAttempts),
-                "ConnectionRetryAttempts must be in range 1-5.");
+                "ConnectionRetryAttempts must be in range 0-4.");
         }
 
-        var maxAttempts = options.ConnectionRetryAttempts;
-
+        var maxAttempts = 1 + options.ConnectionRetryAttempts;
         Exception lastException = null;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
