@@ -29,7 +29,16 @@ public class Oracle
     public static async Task<Result> ExecuteProcedure([PropertyTab] Input input, [PropertyTab] Output output,
         [PropertyTab] Options options, CancellationToken cancellationToken)
     {
-        const int maxAttempts = 2;
+
+        if (options.ConnectionRetryAttempts < 1 || options.ConnectionRetryAttempts > 5)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.ConnectionRetryAttempts),
+                "ConnectionRetryAttempts must be in range 1-5.");
+        }
+
+        var maxAttempts = options.ConnectionRetryAttempts;
+
         Exception lastException = null;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
@@ -83,8 +92,7 @@ public class Oracle
             {
                 lastException = ex;
 
-                // Retry once if it's a stale connection error on first attempt
-                if (RetryOnStaleConnection(ex, attempt, maxAttempts, input.ConnectionString))
+                if (await RetryOnStaleConnection(ex, attempt, maxAttempts, input.ConnectionString, options.ConnectionRetryDelayMs, cancellationToken))
                     continue;
 
                 if (options.ThrowErrorOnFailure)
@@ -110,7 +118,7 @@ public class Oracle
             }
         }
 
-        return HandleRetryExhausted(options, lastException);
+        return HandleRetryExhausted(options, lastException, maxAttempts);
     }
 
     private static async Task<OracleConnection> GetOrCreateConnectionAsync(string connectionString, CancellationToken cancellationToken, bool forceNew = false)
@@ -286,12 +294,14 @@ public class Oracle
     }
 
     [ExcludeFromCodeCoverage]
-    private static Result HandleRetryExhausted(Options options, Exception lastException)
+    private static Result HandleRetryExhausted(Options options, Exception lastException, int maxAttempts)
     {
+        var errorMessage = $"Error when executing command after {maxAttempts} attempt(s): {lastException?.Message ?? "Unknown error"}";
+        
         if (options.ThrowErrorOnFailure)
-            throw new ArgumentException("Error when executing command:", lastException?.Message ?? "Unknown error");
+            throw new ArgumentException(errorMessage, lastException);
 
-        return new Result(false, lastException?.Message ?? "Unknown error after retry");
+        return new Result(false, errorMessage);
     }
 
     [ExcludeFromCodeCoverage]
@@ -301,6 +311,22 @@ public class Oracle
         {
             LazyConnectionCache.TryRemove(connectionString, out _);
             OracleConnection.ClearAllPools();
+            return true;
+        }
+        return false;
+    }
+
+    [ExcludeFromCodeCoverage]
+    private static async Task<bool> RetryOnStaleConnection(Exception ex, int attempt, int maxAttempts, string connectionString, int delayMs, CancellationToken cancellationToken)
+    {
+        if (attempt < maxAttempts && IsStaleConnectionException(ex))
+        {
+            LazyConnectionCache.TryRemove(connectionString, out _);
+            OracleConnection.ClearAllPools();
+            
+            if (delayMs > 0)
+                await Task.Delay(delayMs, cancellationToken);
+            
             return true;
         }
         return false;

@@ -2,6 +2,10 @@
 
 ## [2.5.0] - 2026-05-26
 
+### Added
+
+- Added configurable retry mechanism for stale Oracle connections with `ConnectionRetryAttempts` (default: 2, range: 1-5) and `ConnectionRetryDelayMs` (default: 100ms) options.
+
 ### Fixed
 
 - Fixed issue where cached connections would fail after Oracle server restart by adding automatic retry logic to detect and recover from stale connections.
