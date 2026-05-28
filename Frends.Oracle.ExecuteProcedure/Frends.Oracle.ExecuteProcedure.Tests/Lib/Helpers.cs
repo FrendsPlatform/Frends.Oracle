@@ -84,6 +84,18 @@ internal static class Helpers
         }
     }
 
+    internal static void CreateTestProcedure(OracleConnection con, string procedureName = "unitestproc")
+    {
+        using var cmd = con.CreateCommand();
+        cmd.CommandType = CommandType.Text;
+        cmd.CommandText = @$"
+create or replace procedure test_user.{procedureName} (p_name in varchar2, p_address out varchar2) as
+begin
+  select address into p_address from test_user.workers where name = p_name;
+end {procedureName};";
+        cmd.ExecuteNonQuery();
+    }
+
     internal static void CreateTestUser(OracleConnection con)
     {
         using var cmd = con.CreateCommand();

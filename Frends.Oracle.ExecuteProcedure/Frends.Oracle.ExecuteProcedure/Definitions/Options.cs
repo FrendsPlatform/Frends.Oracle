@@ -46,4 +46,23 @@ public class Options
     /// <example>true</example>
     [DefaultValue(true)]
     public bool CloseConnection { get; set; } = true;
+
+    /// <summary>
+    /// Number of retry attempts after initial failure when encountering stale Oracle connections.
+    /// Value of 0 means no retry (fail immediately on first error).
+    /// Value of 1 means one retry after initial failure (2 total attempts).
+    /// Used to automatically recover from connection errors after Oracle server restart.
+    /// Valid range: 0-4.
+    /// </summary>
+    /// <example>1</example>
+    [DefaultValue(1)]
+    public int ConnectionRetryAttempts { get; set; } = 1;
+
+    /// <summary>
+    /// Delay in milliseconds between connection retry attempts.
+    /// Used when a stale connection is detected after Oracle server restart.
+    /// </summary>
+    /// <example>100</example>
+    [DefaultValue(100)]
+    public int ConnectionRetryDelayMs { get; set; } = 100;
 }

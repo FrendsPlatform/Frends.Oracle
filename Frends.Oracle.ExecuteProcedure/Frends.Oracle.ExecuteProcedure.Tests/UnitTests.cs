@@ -699,4 +699,118 @@ end {_proc};";
         await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
     }
 
+    [Test]
+    public async Task ExecuteProcedure_WithCachedConnection_RecoversAfterOracleRestart()
+    {
+        using var setupCon = new OracleConnection(_connectionStringSys);
+        setupCon.Open();
+        Helpers.CreateTestProcedure(setupCon, _proc);
+        setupCon.Close();
+
+        _input.Command = _proc;
+        _input.CommandType = OracleCommandType.StoredProcedure;
+        _input.Parameters = new[]
+        {
+        new InputParameter
+        {
+            Name = "p_name",
+            Value = "risto",
+            DataType = ProcedureParameterType.Varchar2,
+            Size = 255
+        }
+    };
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.Parameters,
+            OutputParameters = new[]
+            {
+            new OutputParameter
+            {
+                Name = "p_address",
+                DataType = ProcedureParameterType.Varchar2,
+                Size = 255
+            }
+        }
+        };
+
+        _options.CloseConnection = false;
+        _options.ClearConnectionPools = false;
+        _options.ThrowErrorOnFailure = true;
+
+        var result1 = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        ClassicAssert.IsTrue(result1.Success);
+        var dict1 = (Dictionary<string, object>)result1.Output;
+        ClassicAssert.AreEqual("haapatie 9", dict1["p_address"]);
+
+        // Restart Oracle to invalidate cached connection
+        await oracleContainer.StopAsync();
+        await Task.Delay(3000);
+        await oracleContainer.StartAsync();
+        Helpers.TestConnectionBeforeRunningTests(_connectionStringSys);
+
+        using (var recreateCon = new OracleConnection(_connectionStringSys))
+        {
+            recreateCon.Open();
+            Helpers.CreateTestUser(recreateCon);
+            Helpers.CreateTestTable(recreateCon);
+            Helpers.InsertTestData(recreateCon);
+            Helpers.CreateTestProcedure(recreateCon, _proc);
+            recreateCon.Close();
+        }
+
+        var result2 = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        ClassicAssert.IsTrue(result2.Success);
+        var dict2 = (Dictionary<string, object>)result2.Output;
+        ClassicAssert.AreEqual("haapatie 9", dict2["p_address"]);
+
+        var cleanupOptions = new Options
+        {
+            ThrowErrorOnFailure = false,
+            CloseConnection = true,
+            ClearConnectionPools = true
+        };
+
+        await Oracle.ExecuteProcedure(_input, output, cleanupOptions, CancellationToken.None);
+    }
+
+    [Test]
+    public async Task ExecuteProcedure_WithInvalidSql_ReturnsErrorWhenThrowErrorOnFailureFalse()
+    {
+        _input.Command = "INVALID SQL SYNTAX HERE";
+        _input.CommandType = OracleCommandType.Command;
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.AffectedRows
+        };
+
+        _options.ThrowErrorOnFailure = false;
+
+        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+
+        ClassicAssert.IsFalse(result.Success);
+        ClassicAssert.IsNotNull(result.Output);
+        ClassicAssert.IsTrue(result.Output.Contains("ORA-"));
+    }
+
+    [Test]
+    public void ExecuteProcedure_WithInvalidSql_ThrowsExceptionWhenThrowErrorOnFailureTrue()
+    {
+        _input.Command = "INVALID SQL SYNTAX HERE";
+        _input.CommandType = OracleCommandType.Command;
+
+        var output = new Output
+        {
+            DataReturnType = OracleCommandReturnType.AffectedRows
+        };
+
+        _options.ThrowErrorOnFailure = true;
+
+        var ex = Assert.ThrowsAsync<Exception>(async () =>
+            await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None));
+
+        ClassicAssert.IsNotNull(ex);
+        ClassicAssert.IsTrue(ex.Message.Contains("Error when executing command"));
+    }
 }
