@@ -297,7 +297,7 @@ public class Oracle
     private static Result HandleRetryExhausted(Options options, Exception lastException, int maxAttempts)
     {
         var errorMessage = $"Error when executing command after {maxAttempts} attempt(s): {lastException?.Message ?? "Unknown error"}";
-        
+
         if (options.ThrowErrorOnFailure)
             throw new ArgumentException(errorMessage, lastException);
 
@@ -323,10 +323,10 @@ public class Oracle
         {
             LazyConnectionCache.TryRemove(connectionString, out _);
             OracleConnection.ClearAllPools();
-            
+
             if (delayMs > 0)
                 await Task.Delay(delayMs, cancellationToken);
-            
+
             return true;
         }
         return false;
