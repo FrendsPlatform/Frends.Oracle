@@ -89,9 +89,9 @@ internal static class Helpers
         using var cmd = con.CreateCommand();
         cmd.CommandType = CommandType.Text;
         cmd.CommandText = @$"
-create or replace procedure test_user.{procedureName} (name in varchar2, address out varchar2) as
+create or replace procedure test_user.{procedureName} (p_name in varchar2, p_address out varchar2) as
 begin
-  select address into address from test_user.workers where name = name;
+  select address into p_address from test_user.workers where name = p_name;
 end {procedureName};";
         cmd.ExecuteNonQuery();
     }

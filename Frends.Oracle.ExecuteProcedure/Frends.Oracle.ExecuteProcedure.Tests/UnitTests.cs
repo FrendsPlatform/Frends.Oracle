@@ -713,7 +713,7 @@ end {_proc};";
         {
         new InputParameter
         {
-            Name = "name",
+            Name = "p_name",
             Value = "risto",
             DataType = ProcedureParameterType.Varchar2,
             Size = 255
@@ -727,7 +727,7 @@ end {_proc};";
             {
             new OutputParameter
             {
-                Name = "address",
+                Name = "p_address",
                 DataType = ProcedureParameterType.Varchar2,
                 Size = 255
             }
@@ -741,7 +741,7 @@ end {_proc};";
         var result1 = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
         ClassicAssert.IsTrue(result1.Success);
         var dict1 = (Dictionary<string, object>)result1.Output;
-        ClassicAssert.AreEqual("haapatie 9", dict1["address"]);
+        ClassicAssert.AreEqual("haapatie 9", dict1["p_address"]);
 
         // Restart Oracle to invalidate cached connection
         await oracleContainer.StopAsync();
@@ -762,7 +762,7 @@ end {_proc};";
         var result2 = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
         ClassicAssert.IsTrue(result2.Success);
         var dict2 = (Dictionary<string, object>)result2.Output;
-        ClassicAssert.AreEqual("haapatie 9", dict2["address"]);
+        ClassicAssert.AreEqual("haapatie 9", dict2["p_address"]);
 
         var cleanupOptions = new Options
         {

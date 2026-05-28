@@ -57,17 +57,7 @@ public class Oracle
 
                 command.BindByName = options.BindParameterByName;
 
-                var runCommand = command.ExecuteNonQueryAsync(cancellationToken);
-
-                if (runCommand.IsFaulted)
-                {
-                    if (options.ThrowErrorOnFailure)
-                        throw new Exception(runCommand.Exception.Message);
-
-                    return new Result(runCommand.Exception.Message);
-                }
-
-                var rowsAffected = await runCommand;
+                var rowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
 
                 var outputOracleParams = command.Parameters.Cast<OracleParam>()
                     .Where(p => p.Direction == ParameterDirection.Output);
