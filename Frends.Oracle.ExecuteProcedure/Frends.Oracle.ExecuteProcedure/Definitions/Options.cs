@@ -1,59 +1,50 @@
-// <copyright file="Options.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace Frends.Oracle.ExecuteProcedure.Definitions;
 
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
 /// <summary>
-/// Source transfer options.
+/// Options for executing an Oracle command or stored procedure.
 /// </summary>
 public class Options
 {
     /// <summary>
-    /// Gets or sets a value indicating whether choose if error should be thrown if Task failes.
-    /// Otherwise returns Object { Success = false }.
+    /// Whether an exception is thrown when the task fails. When false, the failure is reported in the result.
     /// </summary>
     /// <example>true.</example>
     [DefaultValue(true)]
-    public bool ThrowErrorOnFailure { get; set; }
+    public bool ThrowErrorOnFailure { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets timeout value in seconds.
+    /// Command timeout in seconds.
     /// </summary>
     /// <example>30.</example>
     [DefaultValue(30)]
-    public int TimeoutSeconds { get; set; }
+    public int TimeoutSeconds { get; set; } = 30;
 
     /// <summary>
-    /// Gets or sets a value indicating whether choose to bind the parameter by name.
-    /// If set to false parameter order is crucial.
+    /// Whether Oracle binds parameters by name. When false, parameter order is significant.
     /// </summary>
     /// <example>true.</example>
     [DefaultValue(true)]
-    public bool BindParameterByName { get; set; }
+    public bool BindParameterByName { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets a value indicating whether choose to clear connection pools after execution.
-    /// This is an internal Oracle setting to clear cached connections.
+    /// Whether to clear Oracle connection pools after execution.
     /// </summary>
     /// <example>true.</example>
     [DefaultValue(true)]
     public bool ClearConnectionPools { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets a value indicating whether choose to close the created connection after execution.
-    /// Setting this to false will allow the connection to be reused
-    /// but can cause issues with left open connections or concurrent usage if not handled properly.
+    /// Whether to close the connection after execution.
     /// </summary>
     /// <example>true.</example>
     [DefaultValue(true)]
     public bool CloseConnection { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets number of retry attempts after initial failure when encountering stale Oracle connections.
+    /// Number of retry attempts after an initial failure caused by a stale Oracle connection.
     /// Value of 0 means no retry (fail immediately on first error).
     /// Value of 1 means one retry after initial failure (2 total attempts).
     /// Used to automatically recover from connection errors after Oracle server restart.
@@ -64,15 +55,14 @@ public class Options
     public int ConnectionRetryAttempts { get; set; } = 1;
 
     /// <summary>
-    /// Gets or sets delay in milliseconds between connection retry attempts.
-    /// Used when a stale connection is detected after Oracle server restart.
+    /// Delay in milliseconds between retries after a stale connection is detected.
     /// </summary>
     /// <example>100.</example>
     [DefaultValue(100)]
     public int ConnectionRetryDelayMs { get; set; } = 100;
 
     /// <summary>
-    /// Gets or sets overrides the error message on failure.
+    /// Custom context to prepend to the error message when the task fails.
     /// </summary>
     /// <example>Oracle procedure execution failed.</example>
     [DisplayFormat(DataFormatString = "Text")]

@@ -1,7 +1,3 @@
-// <copyright file="UnitTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace Frends.Oracle.ExecuteProcedure.Tests;
 
 using System;
@@ -24,16 +20,15 @@ using NUnit.Framework.Legacy;
 internal class UnitTests
 {
     private const string Schema = "test_user";
-
-    private const string ConnectionString =
-        $"Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = {Schema}; Password={Schema};";
-
-    private const string ConnectionStringSys =
-        "Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = sys; Password=mysecurepassword; DBA PRIVILEGE=SYSDBA";
-
     private const string Proc = "unitestproc";
 
+    private static string connectionString;
+
+    private static string connectionStringSys;
+    private static int hostPort;
+
     private static Input input;
+    private static Connection connection;
     private static Options options;
     private static IContainer oracleContainer;
 
@@ -44,57 +39,40 @@ internal class UnitTests
     [OneTimeSetUp]
     public async Task OneTimeSetup()
     {
-        input = new Input
-        {
-            ConnectionString = ConnectionString,
-        };
+        hostPort = GetAvailableHostPort();
 
-        options = new Options
-        {
-            ThrowErrorOnFailure = true,
-            TimeoutSeconds = 30,
-            BindParameterByName = true,
-        };
-
-        oracleContainer = new ContainerBuilder()
-            .WithImage("container-registry.oracle.com/database/express:18.4.0-xe")
-            .WithName("Frends.Oracle.ExecuteProcedure.Tests")
-            .WithPortBinding(1521, 1521)
-            .WithEnvironment("ORACLE_PWD", "mysecurepassword")
+        oracleContainer = new ContainerBuilder("gvenzl/oracle-xe:21-slim-faststart")
+            .WithPortBinding(hostPort, 1521)
+            .WithEnvironment("ORACLE_PASSWORD", "mysecurepassword")
             .WithEnvironment("ORACLE_CHARACTERSET", "AL32UTF8")
-
-            // We need to wait for the container to be ready healthy.
-            // Health checks are running every 5 seconds, and it takes ~ 8 minutes to get the container ready.
-            // It gives us 120 retries + 30 as a margin. We will stop waiting after 10 minutes if it's still not ready.
             .WithWaitStrategy(Wait.ForUnixContainer()
-                .UntilContainerIsHealthy(150, s => s.WithTimeout(TimeSpan.FromMinutes(10))))
-            .WithReuse(true)
+                .UntilMessageIsLogged("DATABASE IS READY TO USE!", strategy => strategy.WithTimeout(TimeSpan.FromMinutes(10))))
             .Build();
 
         await oracleContainer.StartAsync();
 
-        Helpers.TestConnectionBeforeRunningTests(ConnectionStringSys);
+        connectionString =
+            $"Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT={hostPort}))(CONNECT_DATA=(SERVICE_NAME=XEPDB1)));User Id={Schema};Password={Schema};";
+        connectionStringSys =
+            $"Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT={hostPort}))(CONNECT_DATA=(SERVICE_NAME=XEPDB1)));User Id=sys;Password=mysecurepassword;DBA Privilege=SYSDBA";
 
-        await using var con = new OracleConnection(ConnectionStringSys);
-        con.Open();
+        Helpers.TestConnectionBeforeRunningTests(connectionStringSys);
+
+        await using var con = new OracleConnection(connectionStringSys);
+        await con.OpenAsync();
         Helpers.CreateTestUser(con);
-        con.Close();
     }
 
     /// <summary>
-    /// Removes the test user and stops the container.
+    /// Stops and removes the Oracle container.
     /// </summary>
     /// <returns>A task representing the teardown operation.</returns>
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await using var con = new OracleConnection(ConnectionStringSys);
-        con.Open();
-        Helpers.DropTestUser(con);
-        con.Close();
-
         if (oracleContainer != null)
         {
+            OracleConnection.ClearAllPools();
             await oracleContainer.DisposeAsync();
         }
     }
@@ -105,12 +83,11 @@ internal class UnitTests
     [SetUp]
     public void Setup()
     {
-        input = new Input
-        {
-            ConnectionString = ConnectionString,
-        };
+        input = new Input();
+        connection = new Connection { ConnectionString = connectionString };
+        options = new Options();
 
-        using var con = new OracleConnection(ConnectionStringSys);
+        using var con = new OracleConnection(connectionStringSys);
         con.Open();
 
         try
@@ -130,7 +107,7 @@ internal class UnitTests
     [TearDown]
     public void TearDown()
     {
-        using var con = new OracleConnection(ConnectionStringSys);
+        using var con = new OracleConnection(connectionStringSys);
         con.Open();
 
         try
@@ -160,7 +137,7 @@ end {Proc};";
 
         input.DataReturnType = OracleCommandReturnType.JSONString;
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
         input.Command = Proc;
@@ -186,7 +163,7 @@ end {Proc};";
             },
         };
 
-        result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
@@ -206,7 +183,7 @@ end {Proc};";
 
         input.DataReturnType = OracleCommandReturnType.XmlString;
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
         input.Command = Proc;
@@ -232,7 +209,7 @@ end {Proc};";
             },
         };
 
-        result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
@@ -252,7 +229,7 @@ end {Proc};";
 
         input.DataReturnType = OracleCommandReturnType.XDocument;
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
         input.Command = Proc;
@@ -278,7 +255,7 @@ end {Proc};";
             },
         };
 
-        result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
@@ -298,7 +275,7 @@ end {Proc};";
 
         input.DataReturnType = OracleCommandReturnType.Parameters;
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
         input.Command = Proc;
@@ -324,7 +301,7 @@ end {Proc};";
             },
         };
 
-        result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
@@ -344,7 +321,7 @@ end {Proc};";
 
         input.DataReturnType = OracleCommandReturnType.AffectedRows;
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
         input.Command = Proc;
@@ -370,7 +347,7 @@ end {Proc};";
             },
         };
 
-        result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
@@ -396,7 +373,7 @@ end {Proc};";
 
         input.DataReturnType = OracleCommandReturnType.JSONString;
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
         input.Command = Proc;
@@ -422,7 +399,7 @@ end {Proc};";
             },
         };
 
-        result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
@@ -451,10 +428,9 @@ end {Proc};";
                     Size = 50,
                 },
             },
-            ConnectionString = ConnectionString,
         };
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
 
         ClassicAssert.IsTrue(result.Success);
 
@@ -519,7 +495,6 @@ end {Proc};";
                     Size = 100,
                 },
             },
-            ConnectionString = ConnectionString,
         };
 
         var options = new Options
@@ -529,7 +504,7 @@ end {Proc};";
             ThrowErrorOnFailure = false,
         };
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
 
         ClassicAssert.IsTrue(result.Success, "Should execute successfully");
         var returnedParams = (Dictionary<string, object>)result.Output;
@@ -585,7 +560,7 @@ end {Proc};";
                 },
             };
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
         var dict = (Dictionary<string, object>)result.Output;
@@ -614,7 +589,7 @@ end {Proc};";
         input.CommandType = OracleCommandType.Command;
 
         input.DataReturnType = OracleCommandReturnType.AffectedRows;
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         Assert.That(result.Success);
 
         input.Command = Proc;
@@ -646,7 +621,7 @@ end {Proc};";
         for (int i = 0; i < numberOfCalls; i++)
         {
             var sw = Stopwatch.StartNew();
-            await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+            await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
             sw.Stop();
             totalTimeForFalse += sw.ElapsedMilliseconds;
         }
@@ -657,7 +632,7 @@ end {Proc};";
         for (int i = 0; i < numberOfCalls; i++)
         {
             var sw = Stopwatch.StartNew();
-            await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+            await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
             sw.Stop();
             totalTimeForTrue += sw.ElapsedMilliseconds;
         }
@@ -673,7 +648,7 @@ end {Proc};";
 
         // last call to clear connection pools for TearDown to work
         options.ClearConnectionPools = true;
-        await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
     }
 
     /// <summary>
@@ -692,7 +667,7 @@ end {Proc};";
 
         input.DataReturnType = OracleCommandReturnType.AffectedRows;
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         Assert.That(result.Success);
 
         input.Command = Proc;
@@ -718,9 +693,9 @@ end {Proc};";
         };
 
         options.CloseConnection = false;
-        await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
 
-        await using var con = new OracleConnection(ConnectionStringSys);
+        await using var con = new OracleConnection(connectionStringSys);
         await con.OpenAsync();
         var ex = Assert.Throws<OracleException>(() => Helpers.DropTestUser(con));
         Assert.That(ex, Is.Not.Null);
@@ -731,7 +706,7 @@ end {Proc};";
 
         // last call to close connection for TearDown to work
         options.CloseConnection = true;
-        await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
     }
 
     /// <summary>
@@ -741,7 +716,7 @@ end {Proc};";
     [Test]
     public async Task ExecuteProcedure_WithCachedConnection_RecoversAfterOracleRestart()
     {
-        using var setupCon = new OracleConnection(ConnectionStringSys);
+        using var setupCon = new OracleConnection(connectionStringSys);
         setupCon.Open();
         Helpers.CreateTestProcedure(setupCon, Proc);
         setupCon.Close();
@@ -774,7 +749,7 @@ end {Proc};";
         options.ClearConnectionPools = false;
         options.ThrowErrorOnFailure = true;
 
-        var result1 = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result1 = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result1.Success);
         var dict1 = (Dictionary<string, object>)result1.Output;
         ClassicAssert.AreEqual("haapatie 9", dict1["p_address"]);
@@ -783,9 +758,9 @@ end {Proc};";
         await oracleContainer.StopAsync();
         await Task.Delay(3000);
         await oracleContainer.StartAsync();
-        Helpers.TestConnectionBeforeRunningTests(ConnectionStringSys);
+        Helpers.TestConnectionBeforeRunningTests(connectionStringSys);
 
-        using (var recreateCon = new OracleConnection(ConnectionStringSys))
+        using (var recreateCon = new OracleConnection(connectionStringSys))
         {
             recreateCon.Open();
             Helpers.CreateTestUser(recreateCon);
@@ -795,7 +770,7 @@ end {Proc};";
             recreateCon.Close();
         }
 
-        var result2 = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result2 = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result2.Success);
         var dict2 = (Dictionary<string, object>)result2.Output;
         ClassicAssert.AreEqual("haapatie 9", dict2["p_address"]);
@@ -807,7 +782,7 @@ end {Proc};";
             ClearConnectionPools = true,
         };
 
-        await Oracle.ExecuteProcedure(input, cleanupOptions, CancellationToken.None);
+        await Oracle.ExecuteProcedure(input, connection, cleanupOptions, CancellationToken.None);
     }
 
     /// <summary>
@@ -824,18 +799,19 @@ end {Proc};";
 
         options.ThrowErrorOnFailure = false;
 
-        var result = await Oracle.ExecuteProcedure(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
 
         ClassicAssert.IsFalse(result.Success);
-        ClassicAssert.IsNotNull(result.Output);
-        ClassicAssert.IsTrue(result.Output.Contains("ORA-"));
+        ClassicAssert.IsNotNull(result.Error);
+        ClassicAssert.That(result.Error.Message, Does.Contain("ORA-"));
+        ClassicAssert.IsNotNull(result.Error.AdditionalInfo);
     }
 
     /// <summary>
     /// Verifies that invalid SQL throws when configured to throw on failure.
     /// </summary>
     [Test]
-    public void ExecuteProcedure_WithInvalidSql_ThrowsExceptionWhenThrowErrorOnFailureTrue()
+    public async Task ExecuteProcedure_WithInvalidSql_ThrowsExceptionWhenThrowErrorOnFailureTrue()
     {
         input.Command = "INVALID SQL SYNTAX HERE";
         input.CommandType = OracleCommandType.Command;
@@ -845,11 +821,21 @@ end {Proc};";
         options.ThrowErrorOnFailure = true;
         options.ErrorMessageOnFailure = "Procedure execution failed";
 
-        var ex = Assert.ThrowsAsync<Exception>(async () =>
-            await Oracle.ExecuteProcedure(input, options, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<Exception>(async () =>
+            await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None));
 
         ClassicAssert.IsNotNull(ex);
         ClassicAssert.AreEqual("Procedure execution failed", ex.Message);
         ClassicAssert.IsNotNull(ex.InnerException);
+    }
+
+    private static int GetAvailableHostPort()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+
+        return port;
     }
 }

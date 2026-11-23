@@ -1,21 +1,12 @@
-﻿// <copyright file="OracleCommandType.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace Frends.Oracle.ExecuteProcedure.Definitions;
 
 /// <summary>
-/// Enumeration for the comnmand type.
+/// Oracle command type.
 /// </summary>
+#pragma warning disable SA1602
 public enum OracleCommandType
 {
-    /// <summary>
-    /// Used to make commands in the CommandType.Text.
-    /// </summary>
     Command,
-
-    /// <summary>
-    /// Used to call stored procedures as CommandType.StoredProcedure.
-    /// </summary>
     StoredProcedure,
 }
+#pragma warning restore SA1602
