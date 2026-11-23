@@ -1,7 +1,3 @@
-// <copyright file="Oracle.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace Frends.Oracle.ExecuteProcedure;
 
 using System.Collections.Concurrent;
@@ -27,11 +23,13 @@ public static class Oracle
     /// [Documentation](https://tasks.frends.com/tasks/frends-tasks/Frends.Oracle.ExecuteProcedure).
     /// </summary>
     /// <param name="input">Properties for the procedure to be executed.</param>
+    /// <param name="connection">Oracle database connection parameters.</param>
     /// <param name="options">Task options.</param>
     /// <param name="cancellationToken">CancellationToken is given by Frends UI.</param>
-    /// <returns>object { bool Success, dynamic Output, string Error }.</returns>
+    /// <returns>object { bool Success, dynamic Output, object Error { string Message, Exception AdditionalInfo } }.</returns>
     public static async Task<Result> ExecuteProcedure(
         [PropertyTab] Input input,
+        [PropertyTab] Connection connection,
         [PropertyTab] Options options,
         CancellationToken cancellationToken)
     {
@@ -51,7 +49,7 @@ public static class Oracle
 
             try
             {
-                con = await GetOrCreateConnectionAsync(input.ConnectionString, cancellationToken, forceNew: attempt > 1);
+                con = await GetOrCreateConnectionAsync(connection.ConnectionString, cancellationToken, forceNew: attempt > 1);
                 await using var command = new OracleCommand();
 
                 command.Connection = con;
@@ -86,22 +84,22 @@ public static class Oracle
 
                 if (input.DataReturnType == OracleCommandReturnType.AffectedRows)
                 {
-                    return new Result(true, rowsAffected);
+                    return new Result { Success = true, Output = rowsAffected };
                 }
                 else if (input.DataReturnType == OracleCommandReturnType.Parameters)
                 {
-                    return new Result(true, outputDict);
+                    return new Result { Success = true, Output = outputDict };
                 }
 
                 var result = HandleDataset(outputOracleParams, input);
 
-                return new Result(true, result);
+                return new Result { Success = true, Output = result };
             }
             catch (Exception ex)
             {
                 lastException = ex;
 
-                if (await RetryOnStaleConnection(ex, attempt, maxAttempts, input.ConnectionString, options.ConnectionRetryDelayMs, cancellationToken))
+                if (await RetryOnStaleConnection(ex, attempt, maxAttempts, connection.ConnectionString, options.ConnectionRetryDelayMs, cancellationToken))
                 {
                     continue;
                 }
@@ -116,7 +114,7 @@ public static class Oracle
                     {
                         await con.CloseAsync();
                         con.Dispose();
-                        LazyConnectionCache.TryRemove(input.ConnectionString, out _);
+                        LazyConnectionCache.TryRemove(connection.ConnectionString, out _);
                     }
 
                     if (options.ClearConnectionPools)

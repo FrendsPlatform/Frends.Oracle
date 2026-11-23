@@ -1,7 +1,3 @@
-﻿// <copyright file="OutputParameter.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace Frends.Oracle.ExecuteProcedure.Definitions;
 
 using System.ComponentModel;
@@ -13,7 +9,7 @@ using System.ComponentModel.DataAnnotations;
 public class OutputParameter
 {
     /// <summary>
-    /// Gets or sets the name of the parameter.
+    /// Name of the parameter.
     /// </summary>
     /// <example>"first_name".</example>
     [DefaultValue("ParameterName")]
@@ -21,14 +17,14 @@ public class OutputParameter
     public string Name { get; set; }
 
     /// <summary>
-    /// Gets or sets the data type of the parameter.
+    /// Data type of the parameter.
     /// </summary>
     /// <example>QueryParameterType.NVarchar2.</example>
     [DefaultValue(ProcedureParameterType.NVarchar2)]
     public ProcedureParameterType DataType { get; set; }
 
     /// <summary>
-    /// Gets or sets size of the parameter.
+    /// Size of the parameter.
     /// </summary>
     /// <example>255.</example>
     public int Size { get; set; }

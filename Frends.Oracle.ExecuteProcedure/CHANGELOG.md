@@ -5,6 +5,7 @@
 ### Changed
 
 - **[Breaking Change]** Moved output parameter and return-type settings into the task's Input properties.
+- **[Breaking Change]** Moved the Oracle connection string to the Connection tab and changed failures to return the template-compatible Error object.
 
 ## [2.5.0] - 2026-05-26
 

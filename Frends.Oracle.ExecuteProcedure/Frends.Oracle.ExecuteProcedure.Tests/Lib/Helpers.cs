@@ -1,7 +1,3 @@
-// <copyright file="Helpers.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace Frends.Oracle.ExecuteProcedure.Tests;
 
 using System;
@@ -15,16 +11,14 @@ using global::Oracle.ManagedDataAccess.Client;
 internal static class Helpers
 {
     /// <summary>
-    /// This method waits for the docker container to be ready.
-    /// Method tests connection 20 times and if connection can't be made, it waits for a minute after every attempt
-    /// and tries again. This is needed for the CI for it to wait for the container to be ready.
+    /// Waits for the Oracle container to accept connections.
     /// </summary>
     /// <param name="connectionString">Connection string used to check database availability.</param>
     internal static void TestConnectionBeforeRunningTests(string connectionString)
     {
-        const int maxRetries = 30;
+        const int maxRetries = 120;
         const int sleepMs = 5000; // 5 seconds
-        bool success = false;
+        Exception lastException = null;
 
         for (int i = 0; i < maxRetries; i++)
         {
@@ -32,20 +26,18 @@ internal static class Helpers
             {
                 using var con = new OracleConnection(connectionString);
                 con.Open();
-                success = true;
-
-                break;
             }
-            catch
+            catch (Exception ex)
             {
+                lastException = ex;
                 Thread.Sleep(sleepMs); // wait before retrying
+                continue;
             }
+
+            return;
         }
 
-        if (!success)
-        {
-            throw new Exception("Check that the docker container is up and running.");
-        }
+        throw new Exception("Oracle did not accept connections before the test setup timed out.", lastException);
     }
 
     /// <summary>
