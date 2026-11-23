@@ -46,4 +46,3 @@ public class Input
     [DefaultValue(ExecuteTypes.Auto)]
     public ExecuteTypes ExecuteType { get; set; }
 }
-

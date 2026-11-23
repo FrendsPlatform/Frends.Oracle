@@ -30,6 +30,4 @@ public class QueryParameter
     /// <example>QueryParameterType.NVarchar2</example>
     [DefaultValue(QueryParameterType.NVarchar2)]
     public QueryParameterType DataType { get; set; }
-
 }
-

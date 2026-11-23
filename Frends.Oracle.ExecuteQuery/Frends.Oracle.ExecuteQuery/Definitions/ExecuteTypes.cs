@@ -23,6 +23,6 @@
         /// <summary>
         /// Executes the query, and returns an object that can iterate over the entire result set.
         /// </summary>
-        ExecuteReader
+        ExecuteReader,
     }
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.1.0] - 2026-11-23
+
+### Added
+
+- Added structured error details and a configurable error message for failed queries.
+
 ## [4.0.0] - 2026-02-26
 
 ### Fixed

@@ -1,11 +1,11 @@
-using NUnit.Framework;
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using Frends.Oracle.ExecuteQuery.Definitions;
 using Newtonsoft.Json.Linq;
-using Oracle.ManagedDataAccess.Client;
-using System.Threading.Tasks;
+using NUnit.Framework;
 using NUnit.Framework.Legacy;
+using Oracle.ManagedDataAccess.Client;
 
 namespace Frends.Oracle.ExecuteQuery.Tests;
 
@@ -15,7 +15,7 @@ namespace Frends.Oracle.ExecuteQuery.Tests;
 /// You will need a free oracle account to download the image
 /// </summary>
 [TestFixture]
-class TestClass
+public class TestClass
 {
     /// <summary>
     /// Connection string for an Oracle database.
@@ -34,8 +34,6 @@ class TestClass
     private static Input input;
 
     private static Options options;
-
-    #region OneTimeSetup&TearDown
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -61,17 +59,13 @@ class TestClass
             con.Close();
     }
 
-    #endregion OneTimeSetup&TearDown
-
-    #region Setup&TearDown
-
     [SetUp]
     public void Setup()
     {
         input = new Input
         {
             ConnectionString = ConnectionString,
-            ExecuteType = ExecuteTypes.Auto
+            ExecuteType = ExecuteTypes.Auto,
         };
 
         options = new Options
@@ -79,7 +73,7 @@ class TestClass
             ThrowErrorOnFailure = true,
             BindParameterByName = true,
             OracleIsolationLevel = TransactionIsolationLevel.Default,
-            TimeoutSeconds = 30
+            TimeoutSeconds = 30,
         };
 
         using var con = new OracleConnection(ConnectionStringSys);
@@ -100,8 +94,6 @@ class TestClass
         if (con.State == System.Data.ConnectionState.Open)
             con.Close();
     }
-
-    #endregion Setup&TearDown
 
     [Test]
     public async Task ExecuteQuery_ParseNumberWithTooHighPrecision()
@@ -124,12 +116,15 @@ class TestClass
         await Oracle.ExecuteQuery(input, options, CancellationToken.None);
 
         options.ThrowErrorOnFailure = false;
+        options.ErrorMessageOnFailure = "Oracle query execution failed";
         input.Query = "SELECT TO_DATE('01-JAN-0001 BC', 'DD-MON-YYYY BC') as invalid_date from workers";
         var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result.Success, Is.False);
-        Assert.That(result.Message.Contains("couldn't be properly formatted"), Is.True);
+        Assert.That(result.Message, Does.Contain("Oracle query execution failed"));
+        Assert.That(result.Error.Message, Does.Contain("couldn't be properly formatted"));
+        Assert.That(result.Error.AdditionalInfo, Is.Not.Null);
     }
 
     [Test]
@@ -158,13 +153,13 @@ class TestClass
             {
                 Name = "name",
                 Value = "Matti",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "id",
                 Value = 3,
-                DataType = QueryParameterType.Int32
+                DataType = QueryParameterType.Int32,
             },
         };
 
@@ -211,8 +206,8 @@ class TestClass
             {
                 Name = "id",
                 Value = 1,
-                DataType = QueryParameterType.Int32
-            }
+                DataType = QueryParameterType.Int32,
+            },
         };
 
         result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
@@ -235,38 +230,38 @@ class TestClass
             {
                 Name = "id1",
                 Value = 1,
-                DataType = QueryParameterType.Int32
+                DataType = QueryParameterType.Int32,
             },
             new QueryParameter
             {
                 Name = "fname1",
                 Value = "Matti",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "lname1",
                 Value = "Meik�l�inen",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "id2",
                 Value = 2,
-                DataType = QueryParameterType.Int32
+                DataType = QueryParameterType.Int32,
             },
             new QueryParameter
             {
                 Name = "fname2",
                 Value = "Teppo",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "lname2",
                 Value = "Teik�l�inen",
-                DataType = QueryParameterType.Varchar2
-            }
+                DataType = QueryParameterType.Varchar2,
+            },
         };
 
         var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
@@ -361,19 +356,19 @@ class TestClass
             {
                 Name = "p",
                 Value = 1,
-                DataType = QueryParameterType.Int32
+                DataType = QueryParameterType.Int32,
             },
             new QueryParameter
             {
                 Name = "p",
                 Value = "Matti",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "p",
                 Value = "Meik�l�inen",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
         };
 
