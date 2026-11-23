@@ -4,8 +4,11 @@
 
 ### Changed
 
-- **[Breaking Change]** Moved output parameter and return-type settings into the task's Input properties.
-- **[Breaking Change]** Moved the Oracle connection string to the Connection tab and changed failures to return the template-compatible Error object.
+- **[Breaking Change] Input:** `DataReturnType` and `OutputParameters` moved from the Output tab to Input.
+- **[Breaking Change] Options:** Added `ErrorMessageOnFailure`, which prefixes the error message when execution fails. Existing options remain: `ThrowErrorOnFailure`, `TimeoutSeconds`, `BindParameterByName`, `ClearConnectionPools`, `CloseConnection`, `ConnectionRetryAttempts`, and `ConnectionRetryDelayMs`.
+- **[Breaking Change] Connection:** Added the Connection tab with `ConnectionString`, moved from Input.
+- **[Breaking Change] Result:** `Error` changed from a string to an `Error` object with `Message` and `AdditionalInfo` (the original exception).
+- Update task to .NET 8.0
 
 ## [2.5.0] - 2026-05-26
 
