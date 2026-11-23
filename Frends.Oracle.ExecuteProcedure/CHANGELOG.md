@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.0.0] - 2026-11-23
+
+### Changed
+
+- **[Breaking Change]** Moved output parameter and return-type settings into the task's Input properties.
+
 ## [2.5.0] - 2026-05-26
 
 ### Added
