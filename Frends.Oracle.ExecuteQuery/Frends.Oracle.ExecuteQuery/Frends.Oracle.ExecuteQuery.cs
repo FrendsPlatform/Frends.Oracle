@@ -21,7 +21,7 @@ public static class Oracle
     /// <param name="input">Properties for the query to be executed</param>
     /// <param name="options">Task options</param>
     /// <param name="cancellationToken">CancellationToken is given by Frends UI</param>
-    /// <returns>Object { bool Success, string Message, JToken.JObject[] Output }</returns>
+    /// <returns>object { bool Success, string Message, JToken.JObject[] Output, object Error { string Message, Exception AdditionalInfo } }</returns>
     public static async Task<Result> ExecuteQuery(
         [PropertyTab] Input input,
         [PropertyTab] Options options,
