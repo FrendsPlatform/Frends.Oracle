@@ -1,4 +1,4 @@
-﻿namespace Frends.Oracle.ExecuteQuery.Definitions;
+namespace Frends.Oracle.ExecuteQuery.Definitions;
 
 /// <summary>
 /// Enumeration for Oracle transaction isolation levels.
