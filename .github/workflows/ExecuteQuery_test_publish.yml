@@ -13,10 +13,10 @@ on:
 
 jobs:
   work_push:
-    uses: FrendsPlatform/FrendsTasks/.github/workflows/official_task_pipeline.yml@fix-workflow
+    uses: FrendsPlatform/FrendsTasks/.github/workflows/official_task_pipeline.yml@main
     with:
       workflow_mode: work
-      os: all
+      os: lin
       workdir: Frends.Oracle.ExecuteQuery
     secrets:
       badge_service_api_key: ${{ secrets.BADGE_SERVICE_API_KEY }}
