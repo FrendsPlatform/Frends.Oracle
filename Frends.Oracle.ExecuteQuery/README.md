@@ -1,11 +1,10 @@
 # Frends.Oracle.ExecuteQuery
 
-[![Frends.Oracle.ExecuteQuery Main](https://github.com/FrendsPlatform/Frends.Oracle/actions/workflows/ExecuteQuery_build_and_test_on_main.yml/badge.svg)](https://github.com/FrendsPlatform/Frends.Oracle/actions/workflows/ExecuteQuery_build_and_test_on_main.yml)
-![MyGet](https://img.shields.io/myget/frends-tasks/v/Frends.Oracle.ExecuteQuery?label=NuGet)
-![GitHub](https://img.shields.io/github/license/FrendsPlatform/Frends.Oracle?label=License)
-![Coverage](https://app-github-custom-badges.azurewebsites.net/Badge?key=FrendsPlatform/Frends.Oracle/Frends.Oracle.ExecuteQuery|main)
-
 Frends task for executing queries in Oracle database.
+
+[![Build status](https://github.com/FrendsPlatform/Frends.Oracle/actions/workflows/ExecuteQuery_main_release.yml/badge.svg)](https://github.com/FrendsPlatform/Frends.Oracle/actions/workflows/ExecuteQuery_main_release.yml)
+![Code Coverage](https://app-github-custom-badges.azurewebsites.net/Badge?key=FrendsPlatform/Frends.Oracle/Frends.Oracle.ExecuteQuery|main)
+[![Repository License](https://img.shields.io/github/license/FrendsPlatform/Frends.Oracle?label=License)](https://github.com/FrendsPlatform/Frends.Oracle/blob/main/LICENSE)
 
 ## Installing
 
