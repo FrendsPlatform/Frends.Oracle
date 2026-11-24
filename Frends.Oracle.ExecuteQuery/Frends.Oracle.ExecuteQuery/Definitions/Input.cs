@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
 namespace Frends.Oracle.ExecuteQuery.Definitions;
@@ -25,15 +25,6 @@ public class Input
     /// { Name = "last_name", Value = "Doe", DataType = QueryParameterType.Varchar2 }
     /// ]</example>
     public QueryParameter[] Parameters { get; set; }
-
-    /// <summary>
-    /// Oracle connection string.
-    /// </summary>
-    /// <example>Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=MyHost)(PORT=MyPort))(CONNECT_DATA=(SERVICE_NAME=MyOracleSID)));User Id=myUsername;Password=myPassword;</example>
-    [DisplayFormat(DataFormatString = "Text")]
-    [PasswordPropertyText]
-    [DefaultValue("Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=MyHost)(PORT=MyPort))(CONNECT_DATA=(SERVICE_NAME=MyOracleSID)));User Id=myUsername;Password=myPassword;")]
-    public string ConnectionString { get; set; }
 
     /// <summary>
     /// Specifies how a command string is interpreted.

@@ -1,10 +1,14 @@
 # Changelog
 
-## [4.1.0] - 2026-11-23
+## [5.0.0] - 2026-11-23
 
 ### Added
 
-- Added structured error details and a configurable error message for failed queries.
+- Added `ErrorMessageOnFailure` parameter to Options. It overrides the error message when the Task fails.
+- Added `ThrowErrorOnFailure` parameter to Options to handle error behavior.
+- Added `Error` parameter to Result. It contains `Message` and `AdditionalInfo` (the original exception) when the Task fails and `ThrowErrorOnFailure` is false.
+- **[Breaking Change]** Moved `ConnectionString` from Input to the new Connection tab (`Connection.ConnectionString`).
+- Update target framework to .NET 8.0.
 
 ## [4.0.0] - 2026-02-26
 

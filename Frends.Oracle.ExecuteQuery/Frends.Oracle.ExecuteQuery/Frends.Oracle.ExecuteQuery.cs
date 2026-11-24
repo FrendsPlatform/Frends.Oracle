@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Data;
 using System.Globalization;
 using Frends.Oracle.ExecuteQuery.Definitions;
@@ -19,17 +19,19 @@ public static class Oracle
     /// [Documentation](https://tasks.frends.com/tasks/frends-tasks/Frends.Oracle.ExecuteQuery)
     /// </summary>
     /// <param name="input">Properties for the query to be executed</param>
+    /// <param name="connection">Connection parameters</param>
     /// <param name="options">Task options</param>
     /// <param name="cancellationToken">CancellationToken is given by Frends UI</param>
     /// <returns>object { bool Success, string Message, JToken.JObject[] Output, object Error { string Message, Exception AdditionalInfo } }</returns>
     public static async Task<Result> ExecuteQuery(
         [PropertyTab] Input input,
+        [PropertyTab] Connection connection,
         [PropertyTab] Options options,
         CancellationToken cancellationToken)
     {
         try
         {
-            await using OracleConnection con = new OracleConnection(input.ConnectionString);
+            await using OracleConnection con = new OracleConnection(connection.ConnectionString);
             await con.OpenAsync(cancellationToken);
             await using var transaction = con.BeginTransaction(GetIsolationLevel(options.OracleIsolationLevel));
             await using var command = con.CreateCommand();

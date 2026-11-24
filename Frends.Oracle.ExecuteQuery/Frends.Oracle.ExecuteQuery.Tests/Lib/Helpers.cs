@@ -1,41 +1,11 @@
-﻿using System;
+using System;
 using System.Data;
-using System.Linq;
-using System.Threading;
 using Oracle.ManagedDataAccess.Client;
 
 namespace Frends.Oracle.ExecuteQuery.Tests;
 
 internal static class Helpers
 {
-    /// <summary>
-    /// This methods waits for the docker container to be ready.
-    /// Method tests connection 20 times and if connection can't be made, it waits for a minute after every attempt
-    /// and tries again. This is needed for the CI for it to wait for the container to be ready.
-    /// </summary>
-    internal static void TestConnectionBeforeRunningTests(string connectionString)
-    {
-        using var con = new OracleConnection(connectionString);
-        foreach (var i in Enumerable.Range(1, 15))
-        {
-            try
-            {
-                con.Open();
-            }
-            catch
-            {
-                if (con.State == ConnectionState.Open)
-                    break;
-
-                Thread.Sleep(60000);
-            }
-        }
-
-        if (con.State != ConnectionState.Open)
-            throw new Exception("Check that the docker container is up and running.");
-        con.Close();
-    }
-
     internal static void CreateTestTable(OracleConnection con)
     {
         using var cmd = con.CreateCommand();
