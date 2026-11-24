@@ -1,0 +1,23 @@
+name: ExecuteProcedure main release
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'Frends.Oracle.ExecuteProcedure/**'
+      - '.github/workflows/Execute*.yml'
+  workflow_dispatch:
+
+jobs:
+  main_pipeline:
+    uses: FrendsPlatform/FrendsTasks/.github/workflows/official_task_pipeline.yml@main
+    with:
+      workflow_mode: main
+      os: all
+      workdir: Frends.Oracle.ExecuteProcedure
+    secrets:
+      badge_service_api_key: ${{ secrets.BADGE_SERVICE_API_KEY }}
+      target_feed_api_key: ${{ secrets.TASKS_FEED_API_KEY }}
