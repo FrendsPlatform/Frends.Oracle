@@ -1,11 +1,10 @@
 # Frends.Oracle.ExecuteProcedure
 
-[![Frends.Oracle.ExecuteProcedure Main](https://github.com/FrendsPlatform/Frends.Oracle/actions/workflows/ExecuteProcedure_build_and_test_on_main.yml/badge.svg)](https://github.com/FrendsPlatform/Frends.Oracle/actions/workflows/ExecuteProcedure_build_and_test_on_main.yml)
-![MyGet](https://img.shields.io/myget/frends-tasks/v/Frends.Oracle.ExecuteProcedure?label=NuGet)
-![GitHub](https://img.shields.io/github/license/FrendsPlatform/Frends.Oracle?label=License)
-![Coverage](https://app-github-custom-badges.azurewebsites.net/Badge?key=FrendsPlatform/Frends.Oracle/Frends.Oracle.ExecuteProcedure|main)
-
 Frends Task for executing stored procedures in Oracle database.
+
+[![Build status](https://github.com/FrendsPlatform/Frends.Oracle/actions/workflows/ExecuteProcedure_main_release.yml/badge.svg)](https://github.com/FrendsPlatform/Frends.Oracle/actions/workflows/ExecuteProcedure_main_release.yml)
+![Code Coverage](https://app-github-custom-badges.azurewebsites.net/Badge?key=FrendsPlatform/Frends.Oracle/Frends.Oracle.ExecuteProcedure|main)
+[![Repository License](https://img.shields.io/github/license/FrendsPlatform/Frends.Oracle?label=License)](https://github.com/FrendsPlatform/Frends.Oracle/blob/main/LICENSE)
 
 ## Installing
 
@@ -30,4 +29,3 @@ run docker engine
 ### Create a NuGet package
 
 `dotnet pack --configuration Release`
-
