@@ -1,10 +1,11 @@
-﻿using Oracle.ManagedDataAccess.Client;
-using System.Data;
 using System.ComponentModel;
+using System.Data;
 using System.Globalization;
 using Frends.Oracle.ExecuteQuery.Definitions;
-using Newtonsoft.Json.Linq;
+using Frends.Oracle.ExecuteQuery.Helpers;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Oracle.ManagedDataAccess.Client;
 
 namespace Frends.Oracle.ExecuteQuery;
 
@@ -18,15 +19,19 @@ public static class Oracle
     /// [Documentation](https://tasks.frends.com/tasks/frends-tasks/Frends.Oracle.ExecuteQuery)
     /// </summary>
     /// <param name="input">Properties for the query to be executed</param>
+    /// <param name="connection">Connection parameters</param>
     /// <param name="options">Task options</param>
     /// <param name="cancellationToken">CancellationToken is given by Frends UI</param>
-    /// <returns>Object { bool Success, string Message, JToken.JObject[] Output }</returns>
-    public static async Task<Result> ExecuteQuery([PropertyTab] Input input, [PropertyTab] Options options,
+    /// <returns>object { bool Success, string Message, JToken.JObject[] Output, object Error { string Message, Exception AdditionalInfo } }</returns>
+    public static async Task<Result> ExecuteQuery(
+        [PropertyTab] Input input,
+        [PropertyTab] Connection connection,
+        [PropertyTab] Options options,
         CancellationToken cancellationToken)
     {
         try
         {
-            await using OracleConnection con = new OracleConnection(input.ConnectionString);
+            await using OracleConnection con = new OracleConnection(connection.ConnectionString);
             await con.OpenAsync(cancellationToken);
             await using var transaction = con.BeginTransaction(GetIsolationLevel(options.OracleIsolationLevel));
             await using var command = con.CreateCommand();
@@ -66,7 +71,7 @@ public static class Oracle
                         await transaction.CommitAsync(cancellationToken);
                         result = new Result(true, "Success", JToken.FromObject(new
                         {
-                            AffectedRows = rows
+                            AffectedRows = rows,
                         }));
 
                         break;
@@ -77,6 +82,7 @@ public static class Oracle
 
                             break;
                         }
+
                     case ExecuteTypes.Scalar:
                         var scalarResult = await command.ExecuteScalarAsync(cancellationToken);
                         result = new Result(true, "Success", scalarResult ?? string.Empty);
@@ -91,11 +97,7 @@ public static class Oracle
             catch (Exception ex)
             {
                 transaction.Rollback();
-
-                if (options.ThrowErrorOnFailure)
-                    throw;
-
-                return new Result(false, ex.Message, null);
+                return ex.Handle(options);
             }
             finally
             {
@@ -104,10 +106,7 @@ public static class Oracle
         }
         catch (Exception ex)
         {
-            if (options.ThrowErrorOnFailure)
-                throw new Exception(ex.Message);
-
-            return new Result(false, ex.Message, null);
+            return ex.Handle(options);
         }
         finally
         {
@@ -115,7 +114,9 @@ public static class Oracle
         }
     }
 
-    private static async Task<JToken> ToJTokenAsync(OracleCommand command, Options options,
+    private static async Task<JToken> ToJTokenAsync(
+        OracleCommand command,
+        Options options,
         CancellationToken cancellationToken)
     {
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -176,7 +177,7 @@ public static class Oracle
         {
             ParameterName = parameter.Name,
             Value = parameter.Value,
-            OracleDbType = (OracleDbType)Enum.Parse(typeof(OracleDbType), parameter.DataType.ToString())
+            OracleDbType = (OracleDbType)Enum.Parse(typeof(OracleDbType), parameter.DataType.ToString()),
         };
     }
 

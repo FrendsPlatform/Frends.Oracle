@@ -1,4 +1,4 @@
-﻿namespace Frends.Oracle.ExecuteQuery.Definitions
+namespace Frends.Oracle.ExecuteQuery.Definitions
 {
     /// <summary>
     /// Execute types.
@@ -23,6 +23,6 @@
         /// <summary>
         /// Executes the query, and returns an object that can iterate over the entire result set.
         /// </summary>
-        ExecuteReader
+        ExecuteReader,
     }
 }

@@ -1,16 +1,25 @@
-﻿namespace Frends.Oracle.ExecuteQuery.Definitions;
-#pragma warning disable 1591 // Self-explanatory. Information can be found from Oracle documentation.
+namespace Frends.Oracle.ExecuteQuery.Definitions;
 
 /// <summary>
-/// Enumeration for Oracle TransactionIsolationLevels 
+/// Enumeration for Oracle transaction isolation levels.
 /// </summary>
 public enum TransactionIsolationLevel
 {
+    /// <summary>Use the default isolation level.</summary>
     Default,
-    None,
-    ReadUncommitted,
-    ReadCommitted,
-    RepeatableRead,
-    Serializable
-}
 
+    /// <summary>Use no transaction isolation.</summary>
+    None,
+
+    /// <summary>Allow reading uncommitted changes.</summary>
+    ReadUncommitted,
+
+    /// <summary>Allow reading only committed changes.</summary>
+    ReadCommitted,
+
+    /// <summary>Repeatable reads within the transaction.</summary>
+    RepeatableRead,
+
+    /// <summary>Serializable transaction isolation.</summary>
+    Serializable,
+}

@@ -1,48 +1,51 @@
-using NUnit.Framework;
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using Frends.Oracle.ExecuteQuery.Definitions;
 using Newtonsoft.Json.Linq;
-using Oracle.ManagedDataAccess.Client;
-using System.Threading.Tasks;
+using NUnit.Framework;
 using NUnit.Framework.Legacy;
+using Oracle.ManagedDataAccess.Client;
+using Testcontainers.Oracle;
 
 namespace Frends.Oracle.ExecuteQuery.Tests;
 
 /// <summary>
-/// Oracle test database is needed to run these tests.
-/// To run tests, run docker-compose up -d
-/// You will need a free oracle account to download the image
+/// Oracle test database is started in Docker with Testcontainers; Docker must be running.
 /// </summary>
 [TestFixture]
-class TestClass
+public class TestClass
 {
     /// <summary>
     /// Connection string for an Oracle database.
     /// </summary>
     private static readonly string Schema = "test_user";
 
-    private static readonly string ConnectionString =
-        $"Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = localhost)(PORT = 51521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = {Schema}; Password={Schema};";
-
-    private static readonly string ConnectionStringSys =
-        "Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = localhost)(PORT = 51521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = sys; Password=mysecurepassword; DBA PRIVILEGE=SYSDBA";
+    private static OracleContainer container;
+    private static string connectionString;
+    private static string connectionStringSys;
 
     /// <summary>
     /// Global variables.
     /// </summary>
     private static Input input;
 
+    private static Connection connection;
+
     private static Options options;
 
-    #region OneTimeSetup&TearDown
-
     [OneTimeSetUp]
-    public void OneTimeSetUp()
+    public async Task OneTimeSetUp()
     {
-        Helpers.TestConnectionBeforeRunningTests(ConnectionStringSys);
+        container = new OracleBuilder("gvenzl/oracle-xe:18-slim-faststart")
+            .Build();
+        await container.StartAsync();
 
-        using var con = new OracleConnection(ConnectionStringSys);
+        var dataSource = $"(DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = {container.Hostname})(PORT = {container.GetMappedPublicPort(1521)}))(CONNECT_DATA = (SERVICE_NAME = XEPDB1)))";
+        connectionString = $"Data Source = {dataSource}; User Id = {Schema}; Password = {Schema};";
+        connectionStringSys = $"Data Source = {dataSource}; User Id = sys; Password = oracle; DBA PRIVILEGE=SYSDBA";
+
+        using var con = new OracleConnection(connectionStringSys);
         con.Open();
         Helpers.CreateTestUser(con);
         con.Close();
@@ -51,27 +54,23 @@ class TestClass
     }
 
     [OneTimeTearDown]
-    public void OneTimeTearDown()
+    public async Task OneTimeTearDown()
     {
-        using var con = new OracleConnection(ConnectionStringSys);
-        con.Open();
-        Helpers.DropTestUser(con);
-        con.Close();
-        if (con.State == System.Data.ConnectionState.Open)
-            con.Close();
+        if (container != null)
+            await container.DisposeAsync();
     }
-
-    #endregion OneTimeSetup&TearDown
-
-    #region Setup&TearDown
 
     [SetUp]
     public void Setup()
     {
         input = new Input
         {
-            ConnectionString = ConnectionString,
-            ExecuteType = ExecuteTypes.Auto
+            ExecuteType = ExecuteTypes.Auto,
+        };
+
+        connection = new Connection
+        {
+            ConnectionString = connectionString,
         };
 
         options = new Options
@@ -79,10 +78,10 @@ class TestClass
             ThrowErrorOnFailure = true,
             BindParameterByName = true,
             OracleIsolationLevel = TransactionIsolationLevel.Default,
-            TimeoutSeconds = 30
+            TimeoutSeconds = 30,
         };
 
-        using var con = new OracleConnection(ConnectionStringSys);
+        using var con = new OracleConnection(connectionStringSys);
         con.Open();
         Helpers.CreateTestTable(con);
         con.Close();
@@ -93,7 +92,7 @@ class TestClass
     [TearDown]
     public void TearDown()
     {
-        using var con = new OracleConnection(ConnectionStringSys);
+        using var con = new OracleConnection(connectionStringSys);
         con.Open();
         Helpers.DropTestTable(con);
         con.Close();
@@ -101,17 +100,15 @@ class TestClass
             con.Close();
     }
 
-    #endregion Setup&TearDown
-
     [Test]
     public async Task ExecuteQuery_ParseNumberWithTooHighPrecision()
     {
         input.Query = "insert into workers (id, first_name) values (1, 'John')";
-        await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         input.Query = "SELECT CAST(1.12345678901234567890123456789012 AS NUMBER) as big_num from workers";
         options.EnableSafeNumericMapping = true;
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result.Success, Is.True);
@@ -121,26 +118,29 @@ class TestClass
     public async Task ExecuteQuery_ThrowErrorWhenInvalidDate()
     {
         input.Query = "insert into workers (id, first_name) values (1, 'John')";
-        await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         options.ThrowErrorOnFailure = false;
+        options.ErrorMessageOnFailure = "Oracle query execution failed";
         input.Query = "SELECT TO_DATE('01-JAN-0001 BC', 'DD-MON-YYYY BC') as invalid_date from workers";
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result.Success, Is.False);
-        Assert.That(result.Message.Contains("couldn't be properly formatted"), Is.True);
+        Assert.That(result.Message, Does.Contain("Oracle query execution failed"));
+        Assert.That(result.Error.Message, Does.Contain("couldn't be properly formatted"));
+        Assert.That(result.Error.AdditionalInfo, Is.Not.Null);
     }
 
     [Test]
     public async Task ExecuteQuery_ThrowErrorWhenInvalidNumber()
     {
         input.Query = "insert into workers (id, first_name) values (1, 'John')";
-        await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         options.ThrowErrorOnFailure = false;
         input.Query = "SELECT CAST(12345678901234567890123456789012345678 AS NUMBER) as big_num from workers";
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result.Success, Is.False);
@@ -151,30 +151,30 @@ class TestClass
     public async Task ExecuteQuery_InsertWithParameters()
     {
         input.Query = "insert " +
-                      "into workers (id, first_name, last_name) values (:id, :name, 'Meik�l�inen')";
+                      "into workers (id, first_name, last_name) values (:id, :name, 'Meikï¿½lï¿½inen')";
         input.Parameters = new[]
         {
             new QueryParameter
             {
                 Name = "name",
                 Value = "Matti",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "id",
                 Value = 3,
-                DataType = QueryParameterType.Int32
+                DataType = QueryParameterType.Int32,
             },
         };
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         Assert.That(result, Is.Not.Null);
         ClassicAssert.AreEqual(1, (int)result.Output["AffectedRows"]);
 
         input.Query = "select first_name from workers where id = 3";
 
-        result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         ClassicAssert.AreEqual(typeof(JArray), result.Output.GetType());
         ClassicAssert.AreEqual("Matti", (string)result.Output[0]["FIRST_NAME"]);
     }
@@ -183,8 +183,8 @@ class TestClass
     public async Task ExecuteQuery_WithAllValues()
     {
         input.Query = "insert " +
-                      "into workers values (1, 'Matti', 'Meik�l�inen', DATE '2022-04-12')";
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+                      "into workers values (1, 'Matti', 'Meikï¿½lï¿½inen', DATE '2022-04-12')";
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         ClassicAssert.IsNotNull(result);
         ClassicAssert.AreEqual(true, result.Success);
         ClassicAssert.AreEqual(1, (int)result.Output["AffectedRows"]);
@@ -194,11 +194,11 @@ class TestClass
     public async Task ExecuteQuery_InsertMultipleRowsIntoTable()
     {
         input.Query = "insert all " +
-                      "into workers (id, first_name, last_name) values (1, 'Matti', 'Meik�l�inen') " +
-                      "into workers (id, first_name, last_name) values (2, 'Teppo', 'Teik�l�inen') " +
+                      "into workers (id, first_name, last_name) values (1, 'Matti', 'Meikï¿½lï¿½inen') " +
+                      "into workers (id, first_name, last_name) values (2, 'Teppo', 'Teikï¿½lï¿½inen') " +
                       "select * from dual";
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         ClassicAssert.IsNotNull(result);
         ClassicAssert.AreEqual(true, result.Success);
         ClassicAssert.AreEqual(2, (int)result.Output["AffectedRows"]);
@@ -211,15 +211,15 @@ class TestClass
             {
                 Name = "id",
                 Value = 1,
-                DataType = QueryParameterType.Int32
-            }
+                DataType = QueryParameterType.Int32,
+            },
         };
 
-        result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         Assert.That(result, Is.Not.Null);
         ClassicAssert.AreEqual(true, result.Success);
         ClassicAssert.AreEqual("Matti", (string)result.Output[0]["FIRST_NAME"]);
-        ClassicAssert.AreEqual("Meik�l�inen", (string)result.Output[0]["LAST_NAME"]);
+        ClassicAssert.AreEqual("Meikï¿½lï¿½inen", (string)result.Output[0]["LAST_NAME"]);
     }
 
     [Test]
@@ -235,41 +235,41 @@ class TestClass
             {
                 Name = "id1",
                 Value = 1,
-                DataType = QueryParameterType.Int32
+                DataType = QueryParameterType.Int32,
             },
             new QueryParameter
             {
                 Name = "fname1",
                 Value = "Matti",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "lname1",
-                Value = "Meik�l�inen",
-                DataType = QueryParameterType.Varchar2
+                Value = "Meikï¿½lï¿½inen",
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "id2",
                 Value = 2,
-                DataType = QueryParameterType.Int32
+                DataType = QueryParameterType.Int32,
             },
             new QueryParameter
             {
                 Name = "fname2",
                 Value = "Teppo",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "lname2",
-                Value = "Teik�l�inen",
-                DataType = QueryParameterType.Varchar2
-            }
+                Value = "Teikï¿½lï¿½inen",
+                DataType = QueryParameterType.Varchar2,
+            },
         };
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         ClassicAssert.IsNotNull(result);
         ClassicAssert.AreEqual(true, result.Success);
         ClassicAssert.AreEqual(2, (int)result.Output["AffectedRows"]);
@@ -279,9 +279,9 @@ class TestClass
     public async Task ExecuteQuery_Update()
     {
         input.Query = "insert " +
-                      "into workers (id, first_name, last_name) values (1, 'Matti', 'Meik�l�inen')";
+                      "into workers (id, first_name, last_name) values (1, 'Matti', 'Meikï¿½lï¿½inen')";
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         ClassicAssert.AreEqual(1, (int)result.Output["AffectedRows"]);
 
         input.Query = "update workers " +
@@ -289,12 +289,12 @@ class TestClass
                       "last_name = 'Saijalainen' " +
                       "where id = 1";
 
-        result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         ClassicAssert.AreEqual(1, (int)result.Output["AffectedRows"]);
 
         input.Query = "select first_name from workers where id = 1";
 
-        result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         ClassicAssert.AreEqual("Saija", (string)result.Output[0]["FIRST_NAME"]);
     }
 
@@ -302,14 +302,14 @@ class TestClass
     public async Task ExecuteQuery_SelectWithNonExistingRow()
     {
         input.Query = "insert " +
-                      "into workers (id, first_name, last_name) values (1, 'Matti', 'Meik�l�inen')";
+                      "into workers (id, first_name, last_name) values (1, 'Matti', 'Meikï¿½lï¿½inen')";
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         ClassicAssert.AreEqual(1, (int)result.Output["AffectedRows"]);
 
         input.Query = "select first_name from workers where id = 2";
 
-        result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         Assert.That(result, Is.Not.Null);
         ClassicAssert.AreEqual("[]", result.Output.ToString());
         Assert.That(result.Success, Is.True);
@@ -321,32 +321,32 @@ class TestClass
         options.ThrowErrorOnFailure = false;
 
         input.Query = "insert " +
-                      "into workers (id, first_name, last_name) values ('Matti', 1, 'Meik�l�inen')";
+                      "into workers (id, first_name, last_name) values ('Matti', 1, 'Meikï¿½lï¿½inen')";
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         Assert.That(result, Is.Not.Null);
         ClassicAssert.AreEqual(false, result.Success);
         ClassicAssert.True(result.Message.Contains("ORA-01722"));
     }
 
     [Test]
-    public void ExecuteQuery_ThatThrowsException()
+    public async Task ExecuteQuery_ThatThrowsException()
     {
         input.Query = "insert " +
-                      "into workers (id, first_name, last_name) values ('Matti', 1, 'Meik�l�inen')";
+                      "into workers (id, first_name, last_name) values ('Matti', 1, 'Meikï¿½lï¿½inen')";
 
-        var error = Assert.ThrowsAsync<Exception>(async () =>
-            await Oracle.ExecuteQuery(input, options, CancellationToken.None));
-        ClassicAssert.True(error.Message.Contains("ORA-01722"));
+        var error = await Assert.CatchAsync<Exception>(async () =>
+            await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None));
+        ClassicAssert.True(error!.Message.Contains("ORA-01722"));
     }
 
     [Test]
-    public void ExecuteQuery_ErrorTesting()
+    public async Task ExecuteQuery_ErrorTesting()
     {
         input.Query = "SELECT NOW();";
-        var error = Assert.ThrowsAsync<Exception>(async () =>
-            await Oracle.ExecuteQuery(input, options, CancellationToken.None));
-        ClassicAssert.True(error.Message.Contains("ORA-00923"));
+        var error = await Assert.CatchAsync<Exception>(async () =>
+            await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None));
+        ClassicAssert.True(error!.Message.Contains("ORA-00923"));
     }
 
     [Test]
@@ -361,41 +361,41 @@ class TestClass
             {
                 Name = "p",
                 Value = 1,
-                DataType = QueryParameterType.Int32
+                DataType = QueryParameterType.Int32,
             },
             new QueryParameter
             {
                 Name = "p",
                 Value = "Matti",
-                DataType = QueryParameterType.Varchar2
+                DataType = QueryParameterType.Varchar2,
             },
             new QueryParameter
             {
                 Name = "p",
-                Value = "Meik�l�inen",
-                DataType = QueryParameterType.Varchar2
+                Value = "Meikï¿½lï¿½inen",
+                DataType = QueryParameterType.Varchar2,
             },
         };
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         Assert.That(result, Is.Not.Null);
         ClassicAssert.AreEqual(true, result.Success);
         ClassicAssert.AreEqual(1, (int)result.Output["AffectedRows"]);
 
         input.Query = "select first_name, last_name from workers where id = 1";
 
-        result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
         ClassicAssert.AreEqual("Matti", (string)result.Output[0]["FIRST_NAME"]);
-        ClassicAssert.AreEqual("Meik�l�inen", (string)result.Output[0]["LAST_NAME"]);
+        ClassicAssert.AreEqual("Meikï¿½lï¿½inen", (string)result.Output[0]["LAST_NAME"]);
     }
 
     [Test]
     public async Task ExecuteQuery_NonQueryExecutionType_Explicit()
     {
         input.ExecuteType = ExecuteTypes.NonQuery;
-        input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meik�l�inen')";
+        input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meikï¿½lï¿½inen')";
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         Assert.That(result, Is.Not.Null);
         ClassicAssert.AreEqual(true, result.Success);
@@ -406,13 +406,13 @@ class TestClass
     public async Task ExecuteQuery_ExecuteReaderExecutionType_Explicit()
     {
         input.ExecuteType = ExecuteTypes.NonQuery;
-        input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meik�l�inen')";
-        await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meikï¿½lï¿½inen')";
+        await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         input.ExecuteType = ExecuteTypes.ExecuteReader;
         input.Query = "select first_name from workers where id = 1";
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         Assert.That(result, Is.Not.Null);
         ClassicAssert.AreEqual(true, result.Success);
@@ -424,13 +424,13 @@ class TestClass
     public async Task ExecuteQuery_ScalarExecutionType_Count()
     {
         input.ExecuteType = ExecuteTypes.NonQuery;
-        input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meik�l�inen')";
-        await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meikï¿½lï¿½inen')";
+        await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         input.ExecuteType = ExecuteTypes.Scalar;
         input.Query = "select count(*) from workers";
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         Assert.That(result, Is.Not.Null);
         ClassicAssert.AreEqual(true, result.Success);
@@ -441,13 +441,13 @@ class TestClass
     public async Task ExecuteQuery_ScalarExecutionType_SingleValue()
     {
         input.ExecuteType = ExecuteTypes.NonQuery;
-        input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meik�l�inen')";
-        await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        input.Query = "insert into workers (id, first_name, last_name) values (1, 'Matti', 'Meikï¿½lï¿½inen')";
+        await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         input.ExecuteType = ExecuteTypes.Scalar;
         input.Query = "select first_name from workers where id = 1";
 
-        var result = await Oracle.ExecuteQuery(input, options, CancellationToken.None);
+        var result = await Oracle.ExecuteQuery(input, connection, options, CancellationToken.None);
 
         Assert.That(result, Is.Not.Null);
         ClassicAssert.AreEqual(true, result.Success);

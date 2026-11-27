@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
 namespace Frends.Oracle.ExecuteQuery.Definitions;
@@ -30,6 +30,4 @@ public class QueryParameter
     /// <example>QueryParameterType.NVarchar2</example>
     [DefaultValue(QueryParameterType.NVarchar2)]
     public QueryParameterType DataType { get; set; }
-
 }
-

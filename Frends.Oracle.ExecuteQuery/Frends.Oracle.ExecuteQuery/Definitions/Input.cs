@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
 namespace Frends.Oracle.ExecuteQuery.Definitions;
@@ -27,15 +27,6 @@ public class Input
     public QueryParameter[] Parameters { get; set; }
 
     /// <summary>
-    /// Oracle connection string.
-    /// </summary>
-    /// <example>Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=MyHost)(PORT=MyPort))(CONNECT_DATA=(SERVICE_NAME=MyOracleSID)));User Id=myUsername;Password=myPassword;</example>
-    [DisplayFormat(DataFormatString = "Text")]
-    [PasswordPropertyText]
-    [DefaultValue("Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=MyHost)(PORT=MyPort))(CONNECT_DATA=(SERVICE_NAME=MyOracleSID)));User Id=myUsername;Password=myPassword;")]
-    public string ConnectionString { get; set; }
-
-    /// <summary>
     /// Specifies how a command string is interpreted.
     /// Auto: ExecuteReader for SELECT-query and NonQuery for UPDATE, INSERT, or DELETE statements.
     /// ExecuteReader: Use this operation to execute any arbitrary SQL statements in Oracle if you want the result set to be returned.
@@ -46,4 +37,3 @@ public class Input
     [DefaultValue(ExecuteTypes.Auto)]
     public ExecuteTypes ExecuteType { get; set; }
 }
-

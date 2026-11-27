@@ -1,4 +1,4 @@
-﻿namespace Frends.Oracle.ExecuteQuery.Definitions;
+namespace Frends.Oracle.ExecuteQuery.Definitions;
 
 /// <summary>
 /// Return object with private setters.
@@ -6,7 +6,22 @@
 public class Result
 {
     /// <summary>
-    /// Boolean value of success of the query 
+    /// Initializes a new instance of the <see cref="Result"/> class.
+    /// </summary>
+    /// <param name="success">Whether the query succeeded.</param>
+    /// <param name="message">The query result message.</param>
+    /// <param name="output">The query output.</param>
+    /// <param name="error">The error details, if the query failed.</param>
+    internal Result(bool success, string message, object output, Error error = null)
+    {
+        Success = success;
+        Message = message;
+        Output = output;
+        Error = error;
+    }
+
+    /// <summary>
+    /// Boolean value of success of the query.
     /// </summary>
     /// <example>true</example>
     public bool Success { get; private set; }
@@ -23,11 +38,9 @@ public class Result
     /// <example>[{"ID": "1","FIRST_NAME": "Saija","LAST_NAME": "Saijalainen","START_DATE": ""}]</example>
     public dynamic Output { get; private set; }
 
-    internal Result(bool success, string message, object output)
-    {
-        Success = success;
-        Message = message;
-        Output = output;
-    }
+    /// <summary>
+    /// Error that occurred during the task.
+    /// </summary>
+    /// <example>object { string Message, Exception AdditionalInfo }</example>
+    public Error Error { get; private set; }
 }
-

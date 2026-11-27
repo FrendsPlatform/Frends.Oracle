@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 
 namespace Frends.Oracle.ExecuteQuery.Definitions;
 
@@ -7,14 +8,6 @@ namespace Frends.Oracle.ExecuteQuery.Definitions;
 /// </summary>
 public class Options
 {
-    /// <summary>
-    /// Choose if an error should be thrown if the Task fails.
-    /// Otherwise, returns Object { Success = false }
-    /// </summary>
-    /// <example>true</example>
-    [DefaultValue(true)]
-    public bool ThrowErrorOnFailure { get; set; }
-
     /// <summary>
     /// Timeout value in seconds.
     /// </summary>
@@ -53,4 +46,20 @@ public class Options
     /// <example>false</example>
     [DefaultValue(false)]
     public bool EnableSafeNumericMapping { get; set; }
+
+    /// <summary>
+    /// Choose if an error should be thrown if the Task fails.
+    /// Otherwise, returns Object { Success = false }
+    /// </summary>
+    /// <example>true</example>
+    [DefaultValue(true)]
+    public bool ThrowErrorOnFailure { get; set; }
+
+    /// <summary>
+    /// Overrides the error message on failure.
+    /// </summary>
+    /// <example>Oracle query execution failed</example>
+    [DisplayFormat(DataFormatString = "Text")]
+    [DefaultValue("")]
+    public string ErrorMessageOnFailure { get; set; } = string.Empty;
 }
