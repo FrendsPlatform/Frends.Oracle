@@ -1,22 +1,24 @@
-﻿using System;
-using System.Data;
-using System.Threading;
-using Oracle.ManagedDataAccess.Client;
-
 namespace Frends.Oracle.ExecuteProcedure.Tests;
 
+using System;
+using System.Data;
+using System.Threading;
+using global::Oracle.ManagedDataAccess.Client;
+
+/// <summary>
+/// Provides database setup helpers for the integration tests.
+/// </summary>
 internal static class Helpers
 {
     /// <summary>
-    /// This method waits for the docker container to be ready.
-    /// Method tests connection 20 times and if connection can't be made, it waits for a minute after every attempt
-    /// and tries again. This is needed for the CI for it to wait for the container to be ready.
+    /// Waits for the Oracle container to accept connections.
     /// </summary>
+    /// <param name="connectionString">Connection string used to check database availability.</param>
     internal static void TestConnectionBeforeRunningTests(string connectionString)
     {
-        const int maxRetries = 30;
+        const int maxRetries = 120;
         const int sleepMs = 5000; // 5 seconds
-        bool success = false;
+        Exception lastException = null;
 
         for (int i = 0; i < maxRetries; i++)
         {
@@ -24,20 +26,24 @@ internal static class Helpers
             {
                 using var con = new OracleConnection(connectionString);
                 con.Open();
-                success = true;
-
-                break;
             }
-            catch
+            catch (Exception ex)
             {
+                lastException = ex;
                 Thread.Sleep(sleepMs); // wait before retrying
+                continue;
             }
+
+            return;
         }
 
-        if (!success)
-            throw new Exception("Check that the docker container is up and running.");
+        throw new Exception("Oracle did not accept connections before the test setup timed out.", lastException);
     }
 
+    /// <summary>
+    /// Creates the test table.
+    /// </summary>
+    /// <param name="con">Open Oracle connection.</param>
     internal static void CreateTestTable(OracleConnection con)
     {
         using var cmd = con.CreateCommand();
@@ -48,6 +54,10 @@ internal static class Helpers
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Inserts sample rows into the test table.
+    /// </summary>
+    /// <param name="con">Open Oracle connection.</param>
     internal static void InsertTestData(OracleConnection con)
     {
         using var cmd = con.CreateCommand();
@@ -57,6 +67,10 @@ internal static class Helpers
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Drops the test table.
+    /// </summary>
+    /// <param name="con">Open Oracle connection.</param>
     internal static void DropTestTable(OracleConnection con)
     {
         using var cmd = con.CreateCommand();
@@ -67,6 +81,11 @@ internal static class Helpers
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Drops a test procedure if it exists.
+    /// </summary>
+    /// <param name="con">Open Oracle connection.</param>
+    /// <param name="name">Procedure name.</param>
     internal static void DropProcedure(OracleConnection con, string name)
     {
         try
@@ -80,10 +99,17 @@ internal static class Helpers
         {
             // ORA-04043: object does not exist - safe to ignore in teardown
             if (ex.Number != 4043)
+            {
                 throw;
+            }
         }
     }
 
+    /// <summary>
+    /// Creates a test procedure.
+    /// </summary>
+    /// <param name="con">Open Oracle connection.</param>
+    /// <param name="procedureName">Procedure name.</param>
     internal static void CreateTestProcedure(OracleConnection con, string procedureName = "unitestproc")
     {
         using var cmd = con.CreateCommand();
@@ -96,6 +122,10 @@ end {procedureName};";
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Creates the test database user and grants its permissions.
+    /// </summary>
+    /// <param name="con">Open Oracle connection.</param>
     internal static void CreateTestUser(OracleConnection con)
     {
         using var cmd = con.CreateCommand();
@@ -133,6 +163,10 @@ end;";
         }
     }
 
+    /// <summary>
+    /// Drops the test database user.
+    /// </summary>
+    /// <param name="con">Open Oracle connection.</param>
     internal static void DropTestUser(OracleConnection con)
     {
         using var cmd = con.CreateCommand();

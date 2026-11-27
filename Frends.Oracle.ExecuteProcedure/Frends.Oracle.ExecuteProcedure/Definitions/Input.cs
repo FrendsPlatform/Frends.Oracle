@@ -1,7 +1,7 @@
-﻿using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
-
 namespace Frends.Oracle.ExecuteProcedure.Definitions;
+
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 
 /// <summary>
 /// Properties for the query to be executed.
@@ -19,22 +19,27 @@ public class Input
     /// <summary>
     /// Type of the command: Command or Stored Procedure.
     /// </summary>
-    /// <example>Type.StoredProcedure</example>
+    /// <example>OracleCommandType.StoredProcedure</example>
     [DefaultValue(OracleCommandType.StoredProcedure)]
     public OracleCommandType CommandType { get; set; }
 
     /// <summary>
     /// Parameters for the database query.
     /// </summary>
-    /// <example>{ Name = "ParamName", Value = "1", DataType = QueryParameterType.NVarchar2 }</example>
+    /// <example>{ Name = "ParamName", Value = "Example value", DataType = ProcedureParameterType.NVarchar2 }</example>
     public InputParameter[] Parameters { get; set; }
 
     /// <summary>
-    /// Oracle connection string.
+    /// Data type for the result of the procedure.
     /// </summary>
-    /// <example>"Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=MyHost)(PORT=MyPort))(CONNECT_DATA=(SERVICE_NAME=MyOracleSID)));User Id=myUsername;Password=myPassword;"</example>
-    [PasswordPropertyText]
+    /// <example>OracleCommandReturnType.XDocument</example>
     [DisplayFormat(DataFormatString = "Text")]
-    [DefaultValue("Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=MyHost)(PORT=MyPort))(CONNECT_DATA=(SERVICE_NAME=MyOracleSID)));User Id=myUsername;Password=myPassword;")]
-    public string ConnectionString { get; set; }
+    [DefaultValue(OracleCommandReturnType.XDocument)]
+    public OracleCommandReturnType DataReturnType { get; set; }
+
+    /// <summary>
+    /// Parameters for the output of the procedure or command.
+    /// </summary>
+    /// <example>{ Name = "address", DataType = ProcedureParameterType.Varchar2, Size = 255 }</example>
+    public OutputParameter[] OutputParameters { get; set; }
 }

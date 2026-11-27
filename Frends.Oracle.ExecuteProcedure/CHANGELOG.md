@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0] - 2026-11-23
+
+### Changed
+
+- **[Breaking Change] Input:** `DataReturnType` and `OutputParameters` moved from the Output tab to Input.
+- **[Breaking Change] Connection:** Added the Connection tab with `ConnectionString`, moved from Input. `ClearConnectionPools`, `CloseConnection`, `ConnectionRetryAttempts`, and `ConnectionRetryDelayMs` moved from Options to Connection.
+- **[Breaking Change] Result:** `Error` changed from a string to an `Error` object with `Message` and `AdditionalInfo` (the original exception).
+- **[Breaking Change] Error handling:** When `ThrowErrorOnFailure` is enabled and no custom failure message is set, the task now throws the original exception instead of wrapping it in a generic exception.
+- Added `ErrorMessageOnFailure` in `Options` tab, that prefixes the error message when execution fails.
+- Update task to .NET 8.0
+
 ## [2.5.0] - 2026-05-26
 
 ### Added

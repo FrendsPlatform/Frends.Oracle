@@ -1,38 +1,25 @@
-﻿namespace Frends.Oracle.ExecuteProcedure.Definitions;
+namespace Frends.Oracle.ExecuteProcedure.Definitions;
 
 /// <summary>
-/// Return object with private setters.
+/// Result of the task.
 /// </summary>
 public class Result
 {
     /// <summary>
-    /// Boolean value of success of the query.
+    /// Indicates if the task completed successfully.
     /// </summary>
     /// <example>true</example>
-    public bool Success { get; private set; }
+    public bool Success { get; set; }
 
     /// <summary>
-    /// Content and data type depends on task output properties.
+    /// Output returned by the Oracle command or procedure.
     /// </summary>
-    /// <example>[{"ID": "1","FIRST_NAME": "Saija","LAST_NAME": "Saijalainen","START_DATE": ""}]</example>
-    public dynamic Output { get; private set; }
+    /// <example>[{"ID":"1","NAME":"Example"}]</example>
+    public dynamic Output { get; set; }
 
     /// <summary>
-    /// String value of the Error message that comes from Oracle.
+    /// Error that occurred during task execution.
     /// </summary>
-    /// <example>"ORA-01722: invalid number"</example>
-    public string Error { get; private set; }
-
-    internal Result(bool success, dynamic output)
-    {
-        Success = success;
-        Output = output;
-    }
-
-    internal Result(string error)
-    {
-        Success = false;
-        Error = error;
-    }
+    /// <example>object { string Message, Exception AdditionalInfo }</example>
+    public Error Error { get; set; }
 }
-

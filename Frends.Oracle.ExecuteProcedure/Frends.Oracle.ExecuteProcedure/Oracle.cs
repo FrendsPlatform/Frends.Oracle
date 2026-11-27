@@ -1,42 +1,46 @@
-﻿using Frends.Oracle.ExecuteProcedure.Definitions;
-using Newtonsoft.Json;
-using Oracle.ManagedDataAccess.Client;
+namespace Frends.Oracle.ExecuteProcedure;
+
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Xml.Linq;
-using OracleParam = Oracle.ManagedDataAccess.Client.OracleParameter;
-
-namespace Frends.Oracle.ExecuteProcedure;
+using Frends.Oracle.ExecuteProcedure.Definitions;
+using Frends.Oracle.ExecuteProcedure.Helpers;
+using global::Oracle.ManagedDataAccess.Client;
+using Newtonsoft.Json;
+using OracleParam = global::Oracle.ManagedDataAccess.Client.OracleParameter;
 
 /// <summary>
-/// Task class
+/// Task class.
 /// </summary>
-public class Oracle
+public static class Oracle
 {
     private static readonly ConcurrentDictionary<string, Lazy<OracleConnection>> LazyConnectionCache = new();
 
     /// <summary>
     /// Task for performing stored procedures in Oracle database.
-    /// [Documentation](https://tasks.frends.com/tasks/frends-tasks/Frends.Oracle.ExecuteProcedure)
+    /// [Documentation](https://tasks.frends.com/tasks/frends-tasks/Frends.Oracle.ExecuteProcedure).
     /// </summary>
-    /// <param name="input">Properties for the procedure to be executed</param>
-    /// <param name="output">Properties for the output of the procedure.</param>
-    /// <param name="options">Task options</param>
-    /// <param name="cancellationToken">CancellationToken is given by Frends UI</param>
-    /// <returns>Object { bool Success, int RowsAffected, IEnumerable Output }</returns>
-    public static async Task<Result> ExecuteProcedure([PropertyTab] Input input, [PropertyTab] Output output,
-        [PropertyTab] Options options, CancellationToken cancellationToken)
+    /// <param name="input">Properties for the procedure to be executed.</param>
+    /// <param name="connection">Oracle database connection parameters.</param>
+    /// <param name="options">Task options.</param>
+    /// <param name="cancellationToken">CancellationToken is given by Frends UI.</param>
+    /// <returns>object { bool Success, dynamic Output, object Error { string Message, Exception AdditionalInfo } }.</returns>
+    public static async Task<Result> ExecuteProcedure(
+        [PropertyTab] Input input,
+        [PropertyTab] Connection connection,
+        [PropertyTab] Options options,
+        CancellationToken cancellationToken)
     {
-        if (options.ConnectionRetryAttempts < 0 || options.ConnectionRetryAttempts > 4)
+        if (connection.ConnectionRetryAttempts < 0 || connection.ConnectionRetryAttempts > 4)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.ConnectionRetryAttempts),
+                nameof(connection.ConnectionRetryAttempts),
                 "ConnectionRetryAttempts must be in range 0-4.");
         }
 
-        var maxAttempts = 1 + options.ConnectionRetryAttempts;
+        var maxAttempts = 1 + connection.ConnectionRetryAttempts;
         Exception lastException = null;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
@@ -45,7 +49,7 @@ public class Oracle
 
             try
             {
-                con = await GetOrCreateConnectionAsync(input.ConnectionString, cancellationToken, forceNew: attempt > 1);
+                con = await GetOrCreateConnectionAsync(connection.ConnectionString, cancellationToken, forceNew: attempt > 1);
                 await using var command = new OracleCommand();
 
                 command.Connection = con;
@@ -56,11 +60,15 @@ public class Oracle
                     : CommandType.StoredProcedure;
 
                 if (input.Parameters != null)
+                {
                     command.Parameters.AddRange(input.Parameters.Select(p => CreateOracleInputParameter(p)).ToArray());
+                }
 
-                if (output.OutputParameters != null)
-                    command.Parameters.AddRange(output.OutputParameters.Select(x => CreateOracleOutputParameter(x))
+                if (input.OutputParameters != null)
+                {
+                    command.Parameters.AddRange(input.OutputParameters.Select(x => CreateOracleOutputParameter(x))
                         .ToArray());
+                }
 
                 command.BindByName = options.BindParameterByName;
 
@@ -72,43 +80,52 @@ public class Oracle
                 var outputDict = outputOracleParams
                     .ToDictionary(
                         p => p.ParameterName,
-                        p => GetOracleParameterValue(p)
-                    );
+                        p => GetOracleParameterValue(p));
 
-                if (output.DataReturnType == OracleCommandReturnType.AffectedRows)
-                    return new Result(true, rowsAffected);
-                else if (output.DataReturnType == OracleCommandReturnType.Parameters)
+                if (input.DataReturnType == OracleCommandReturnType.AffectedRows)
                 {
-                    return new Result(true, outputDict);
+                    return new Result { Success = true, Output = rowsAffected };
+                }
+                else if (input.DataReturnType == OracleCommandReturnType.Parameters)
+                {
+                    return new Result { Success = true, Output = outputDict };
                 }
 
-                var result = HandleDataset(outputOracleParams, output);
+                var result = HandleDataset(outputOracleParams, input);
 
-                return new Result(true, result);
+                return new Result { Success = true, Output = result };
             }
             catch (Exception ex)
             {
                 lastException = ex;
 
-                if (await RetryOnStaleConnection(ex, attempt, maxAttempts, input.ConnectionString, options.ConnectionRetryDelayMs, cancellationToken))
+                if (await RetryOnStaleConnection(ex, attempt, maxAttempts, connection.ConnectionString, connection.ConnectionRetryDelayMs, cancellationToken))
+                {
                     continue;
+                }
 
-                if (options.ThrowErrorOnFailure)
-                    throw new Exception($"Error when executing command: {ex.Message}", ex);
+                if (attempt == maxAttempts && IsStaleConnectionException(ex))
+                {
+                    var retryExhaustedException = new ArgumentException(
+                        $"Error when executing command after {maxAttempts} attempt(s): {ex.Message}",
+                        ex);
+                    return retryExhaustedException.Handle(options);
+                }
 
-                return new Result(false, ex.Message);
+                return ex.Handle(options);
             }
             finally
             {
                 if (con != null)
                 {
-                    if (options.CloseConnection)
+                    if (connection.CloseConnection)
                     {
                         await con.CloseAsync();
                         con.Dispose();
-                        LazyConnectionCache.TryRemove(input.ConnectionString, out _);
+                        LazyConnectionCache.TryRemove(connection.ConnectionString, out _);
                     }
-                    if (options.ClearConnectionPools)
+
+                    if (connection.ClearConnectionPools)
                     {
                         OracleConnection.ClearAllPools();
                     }
@@ -116,7 +133,7 @@ public class Oracle
             }
         }
 
-        return HandleRetryExhausted(options, lastException, maxAttempts);
+        return lastException.Handle(options);
     }
 
     private static async Task<OracleConnection> GetOrCreateConnectionAsync(string connectionString, CancellationToken cancellationToken, bool forceNew = false)
@@ -132,7 +149,9 @@ public class Oracle
         try
         {
             if (con.State != ConnectionState.Open)
+            {
                 await con.OpenAsync(cancellationToken);
+            }
 
             return con;
         }
@@ -151,14 +170,16 @@ public class Oracle
     private static bool IsStaleConnectionException(Exception ex)
     {
         if (ex is not OracleException oracleEx)
+        {
             return false;
+        }
 
         // Connection lost errors - these indicate server restart or network failure
         return oracleEx.Number is
-            3113 or  // ORA-03113: end-of-file on communication channel
-            3135 or  // ORA-03135: connection lost contact
-            1089 or  // ORA-01089: immediate shutdown in progress
-            1034 or  // ORA-01034: ORACLE not available
+            3113 or // ORA-03113: end-of-file on communication channel
+            3135 or // ORA-03135: connection lost contact
+            1089 or // ORA-01089: immediate shutdown in progress
+            1034 or // ORA-01034: ORACLE not available
             12514 or // ORA-12514: TNS:listener does not currently know of service
             12541 or // ORA-12541: TNS:no listener
             12537 or // ORA-12537: TNS:connection closed (added for network drops)
@@ -173,7 +194,7 @@ public class Oracle
             Value = parameter.Value,
             OracleDbType = (OracleDbType)Enum.Parse(typeof(OracleDbType), parameter.DataType.ToString()),
             Direction = ParameterDirection.Input,
-            Size = parameter.Size
+            Size = parameter.Size,
         };
     }
 
@@ -184,13 +205,13 @@ public class Oracle
             ParameterName = parameter.Name,
             OracleDbType = (OracleDbType)Enum.Parse(typeof(OracleDbType), parameter.DataType.ToString()),
             Direction = ParameterDirection.Output,
-            Size = parameter.Size
+            Size = parameter.Size,
         };
     }
 
-    private static dynamic HandleDataset(IEnumerable<OracleParam> outputOracleParams, Output output)
+    private static dynamic HandleDataset(IEnumerable<OracleParam> outputOracleParams, Input input)
     {
-        //Builds xml document from Oracle output parameters
+        // Builds xml document from Oracle output parameters
         var xDoc = new XDocument();
         var root = new XElement("Root");
         xDoc.Add(root);
@@ -199,7 +220,7 @@ public class Oracle
         dynamic commandResult;
 
         // Affected rows are handled above!
-        switch (output.DataReturnType)
+        switch (input.DataReturnType)
         {
             case OracleCommandReturnType.JSONString:
                 commandResult = JsonConvert.SerializeXNode(xDoc, Formatting.None, true);
@@ -226,7 +247,10 @@ public class Oracle
         var value = GetOracleParameterValue(parameter);
 
         if (value == null)
+        {
             return xelem;
+        }
+
         xelem.Value = value.ToString();
 
         return xelem;
@@ -235,7 +259,9 @@ public class Oracle
     private static object GetOracleParameterValue(OracleParam p)
     {
         if (p.Value == null || p.Value == DBNull.Value)
+        {
             return null;
+        }
 
         return p.Value switch
         {
@@ -247,14 +273,16 @@ public class Oracle
             global::Oracle.ManagedDataAccess.Types.OracleTimeStampLTZ v => v.IsNull ? null : v.Value,
             global::Oracle.ManagedDataAccess.Types.OracleClob v => v.IsNull ? null : v.Value,
             global::Oracle.ManagedDataAccess.Types.OracleBlob blob => BlobToBase64(blob),
-            _ => p.Value
+            _ => p.Value,
         };
     }
 
     private static string BlobToBase64(global::Oracle.ManagedDataAccess.Types.OracleBlob blob)
     {
         if (blob == null || blob.IsNull || blob.Length == 0)
+        {
             return null;
+        }
 
         const int chunkSize = 81920;
         long remaining = blob.Length;
@@ -268,7 +296,9 @@ public class Oracle
             int bytesRead = blob.Read(buffer, 0, bytesToRead);
 
             if (bytesRead <= 0)
+            {
                 throw new EndOfStreamException("Unexpected end of Oracle BLOB stream.");
+            }
 
             ms.Write(buffer, 0, bytesRead);
             remaining -= bytesRead;
@@ -292,17 +322,6 @@ public class Oracle
     }
 
     [ExcludeFromCodeCoverage]
-    private static Result HandleRetryExhausted(Options options, Exception lastException, int maxAttempts)
-    {
-        var errorMessage = $"Error when executing command after {maxAttempts} attempt(s): {lastException?.Message ?? "Unknown error"}";
-
-        if (options.ThrowErrorOnFailure)
-            throw new ArgumentException(errorMessage, lastException);
-
-        return new Result(false, errorMessage);
-    }
-
-    [ExcludeFromCodeCoverage]
     private static bool RetryOnStaleConnection(Exception ex, int attempt, int maxAttempts, string connectionString)
     {
         if (attempt < maxAttempts && IsStaleConnectionException(ex))
@@ -311,6 +330,7 @@ public class Oracle
             OracleConnection.ClearAllPools();
             return true;
         }
+
         return false;
     }
 
@@ -323,10 +343,13 @@ public class Oracle
             OracleConnection.ClearAllPools();
 
             if (delayMs > 0)
+            {
                 await Task.Delay(delayMs, cancellationToken);
+            }
 
             return true;
         }
+
         return false;
     }
 
@@ -340,5 +363,4 @@ public class Oracle
         await con.OpenAsync(cancellationToken);
         return con;
     }
-
 }

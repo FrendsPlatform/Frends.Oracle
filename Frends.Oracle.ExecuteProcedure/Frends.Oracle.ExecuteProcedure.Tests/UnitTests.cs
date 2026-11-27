@@ -1,93 +1,93 @@
-using NUnit.Framework;
-using System.Threading;
-using Frends.Oracle.ExecuteProcedure.Definitions;
-using System.Threading.Tasks;
-using Oracle.ManagedDataAccess.Client;
-using NUnit.Framework.Legacy;
-using System.Collections.Generic;
-using System;
-using System.Diagnostics;
-
 namespace Frends.Oracle.ExecuteProcedure.Tests;
 
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
-using System.Linq;
+using Frends.Oracle.ExecuteProcedure.Definitions;
+using global::Oracle.ManagedDataAccess.Client;
+using NUnit.Framework;
+using NUnit.Framework.Legacy;
 
+/// <summary>
+/// Integration tests for executing Oracle stored procedures.
+/// </summary>
 [TestFixture]
-class UnitTests
+internal class UnitTests
 {
-    private static Input _input;
-    private static Options _options;
+    private const string Schema = "test_user";
+    private const string Proc = "unitestproc";
+
+    private static string connectionString;
+
+    private static string connectionStringSys;
+    private static int hostPort;
+
+    private static Input input;
+    private static Connection connection;
+    private static Options options;
     private static IContainer oracleContainer;
 
-    private readonly static string schema = "test_user";
-
-    private readonly static string _connectionString =
-        $"Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = {schema}; Password={schema};";
-
-    private readonly static string _connectionStringSys =
-        "Data Source = (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 127.0.0.1)(PORT = 1521))(CONNECT_DATA = (SERVICE_NAME = XEPDB1))); User Id = sys; Password=mysecurepassword; DBA PRIVILEGE=SYSDBA";
-
-    private readonly static string _proc = "unitestproc";
-
+    /// <summary>
+    /// Starts Oracle and prepares the test user.
+    /// </summary>
+    /// <returns>A task representing the setup operation.</returns>
     [OneTimeSetUp]
     public async Task OneTimeSetup()
     {
-        _input = new Input
-        {
-            ConnectionString = _connectionString,
-        };
+        hostPort = GetAvailableHostPort();
 
-        _options = new Options
-        {
-            ThrowErrorOnFailure = true,
-            TimeoutSeconds = 30,
-            BindParameterByName = true,
-        };
-
-        oracleContainer = new ContainerBuilder()
-            .WithImage("container-registry.oracle.com/database/express:18.4.0-xe")
-            .WithName("Frends.Oracle.ExecuteProcedure.Tests")
-            .WithPortBinding(1521, 1521)
-            .WithEnvironment("ORACLE_PWD", "mysecurepassword")
+        oracleContainer = new ContainerBuilder("gvenzl/oracle-xe:21-slim-faststart")
+            .WithPortBinding(hostPort, 1521)
+            .WithEnvironment("ORACLE_PASSWORD", "mysecurepassword")
             .WithEnvironment("ORACLE_CHARACTERSET", "AL32UTF8")
-            // We need to wait for the container to be ready healthy.
-            // Health checks are running every 5 seconds, and it takes ~ 8 minutes to get the container ready.
-            // It gives us 120 retries + 30 as a margin. We will stop waiting after 10 minutes if it's still not ready.
             .WithWaitStrategy(Wait.ForUnixContainer()
-                .UntilContainerIsHealthy(150, s => s.WithTimeout(TimeSpan.FromMinutes(10))))
-            .WithReuse(true)
+                .UntilMessageIsLogged("DATABASE IS READY TO USE!", strategy => strategy.WithTimeout(TimeSpan.FromMinutes(10))))
             .Build();
 
         await oracleContainer.StartAsync();
 
-        Helpers.TestConnectionBeforeRunningTests(_connectionStringSys);
+        connectionString =
+            $"Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT={hostPort}))(CONNECT_DATA=(SERVICE_NAME=XEPDB1)));User Id={Schema};Password={Schema};";
+        connectionStringSys =
+            $"Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT={hostPort}))(CONNECT_DATA=(SERVICE_NAME=XEPDB1)));User Id=sys;Password=mysecurepassword;DBA Privilege=SYSDBA";
 
-        await using var con = new OracleConnection(_connectionStringSys);
-        con.Open();
+        Helpers.TestConnectionBeforeRunningTests(connectionStringSys);
+
+        await using var con = new OracleConnection(connectionStringSys);
+        await con.OpenAsync();
         Helpers.CreateTestUser(con);
-        con.Close();
     }
 
+    /// <summary>
+    /// Stops and removes the Oracle container.
+    /// </summary>
+    /// <returns>A task representing the teardown operation.</returns>
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await using var con = new OracleConnection(_connectionStringSys);
-        con.Open();
-        Helpers.DropTestUser(con);
-        con.Close();
-
         if (oracleContainer != null)
         {
+            OracleConnection.ClearAllPools();
             await oracleContainer.DisposeAsync();
         }
     }
 
+    /// <summary>
+    /// Creates and populates a fresh test table.
+    /// </summary>
     [SetUp]
     public void Setup()
     {
-        using var con = new OracleConnection(_connectionStringSys);
+        input = new Input();
+        connection = new Connection { ConnectionString = connectionString };
+        options = new Options();
+
+        using var con = new OracleConnection(connectionStringSys);
         con.Open();
 
         try
@@ -101,16 +101,19 @@ class UnitTests
         }
     }
 
+    /// <summary>
+    /// Removes the test table and procedure.
+    /// </summary>
     [TearDown]
     public void TearDown()
     {
-        using var con = new OracleConnection(_connectionStringSys);
+        using var con = new OracleConnection(connectionStringSys);
         con.Open();
 
         try
         {
             Helpers.DropTestTable(con);
-            Helpers.DropProcedure(con, _proc);
+            Helpers.DropProcedure(con, Proc);
         }
         finally
         {
@@ -118,282 +121,292 @@ class UnitTests
         }
     }
 
+    /// <summary>
+    /// Verifies JSON output for an Oracle procedure.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_ProcedureJSONString()
     {
-        _input.Command = @$"
-create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+        input.Command = @$"
+create or replace procedure {Proc} (name in varchar2, address out varchar2) as
 begin
   select address into address from workers where name = name;
-end {_proc};";
-        _input.CommandType = OracleCommandType.Command;
+end {Proc};";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.JSONString
-        };
+        input.DataReturnType = OracleCommandReturnType.JSONString;
 
-        var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
-        _input.Command = _proc;
-        _input.CommandType = OracleCommandType.StoredProcedure;
-        _input.Parameters = new InputParameter[]
+        input.Command = Proc;
+        input.CommandType = OracleCommandType.StoredProcedure;
+        input.Parameters = new InputParameter[]
         {
             new InputParameter
             {
                 Name = "name",
                 Value = "risto",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        output.OutputParameters = new OutputParameter[]
+        input.OutputParameters = new OutputParameter[]
         {
             new OutputParameter
             {
                 Name = "address",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
+    /// <summary>
+    /// Verifies XML string output for an Oracle procedure.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_ProcedureXmlString()
     {
-        _input.Command = @$"
-create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+        input.Command = @$"
+create or replace procedure {Proc} (name in varchar2, address out varchar2) as
 begin
   select address into address from workers where name = name;
-end {_proc};";
-        _input.CommandType = OracleCommandType.Command;
+end {Proc};";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.XmlString
-        };
+        input.DataReturnType = OracleCommandReturnType.XmlString;
 
-        var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
-        _input.Command = _proc;
-        _input.CommandType = OracleCommandType.StoredProcedure;
-        _input.Parameters = new InputParameter[]
+        input.Command = Proc;
+        input.CommandType = OracleCommandType.StoredProcedure;
+        input.Parameters = new InputParameter[]
         {
             new InputParameter
             {
                 Name = "name",
                 Value = "risto",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        output.OutputParameters = new OutputParameter[]
+        input.OutputParameters = new OutputParameter[]
         {
             new OutputParameter
             {
                 Name = "address",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
+    /// <summary>
+    /// Verifies XDocument output for an Oracle procedure.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_ProcedureXDocument()
     {
-        _input.Command = @$"
-create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+        input.Command = @$"
+create or replace procedure {Proc} (name in varchar2, address out varchar2) as
 begin
   select address into address from workers where name = name;
-end {_proc};";
-        _input.CommandType = OracleCommandType.Command;
+end {Proc};";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.XDocument
-        };
+        input.DataReturnType = OracleCommandReturnType.XDocument;
 
-        var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
-        _input.Command = _proc;
-        _input.CommandType = OracleCommandType.StoredProcedure;
-        _input.Parameters = new InputParameter[]
+        input.Command = Proc;
+        input.CommandType = OracleCommandType.StoredProcedure;
+        input.Parameters = new InputParameter[]
         {
             new InputParameter
             {
                 Name = "name",
                 Value = "risto",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        output.OutputParameters = new OutputParameter[]
+        input.OutputParameters = new OutputParameter[]
         {
             new OutputParameter
             {
                 Name = "address",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
+    /// <summary>
+    /// Verifies output parameter results for an Oracle procedure.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_ProcedureParameters()
     {
-        _input.Command = @$"
-create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+        input.Command = @$"
+create or replace procedure {Proc} (name in varchar2, address out varchar2) as
 begin
   select address into address from workers where name = name;
-end {_proc};";
-        _input.CommandType = OracleCommandType.Command;
+end {Proc};";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.Parameters
-        };
+        input.DataReturnType = OracleCommandReturnType.Parameters;
 
-        var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
-        _input.Command = _proc;
-        _input.CommandType = OracleCommandType.StoredProcedure;
-        _input.Parameters = new InputParameter[]
+        input.Command = Proc;
+        input.CommandType = OracleCommandType.StoredProcedure;
+        input.Parameters = new InputParameter[]
         {
             new InputParameter
             {
                 Name = "name",
                 Value = "risto",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        output.OutputParameters = new OutputParameter[]
+        input.OutputParameters = new OutputParameter[]
         {
             new OutputParameter
             {
                 Name = "address",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
+    /// <summary>
+    /// Verifies affected-row results for an Oracle procedure.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_ProcedureAffectedRows()
     {
-        _input.Command = @$"
-create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+        input.Command = @$"
+create or replace procedure {Proc} (name in varchar2, address out varchar2) as
 begin
   select address into address from workers where name = name;
-end {_proc};";
-        _input.CommandType = OracleCommandType.Command;
+end {Proc};";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.AffectedRows
-        };
+        input.DataReturnType = OracleCommandReturnType.AffectedRows;
 
-        var result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
-        _input.Command = _proc;
-        _input.CommandType = OracleCommandType.StoredProcedure;
-        _input.Parameters = new InputParameter[]
+        input.Command = Proc;
+        input.CommandType = OracleCommandType.StoredProcedure;
+        input.Parameters = new InputParameter[]
         {
             new InputParameter
             {
                 Name = "name",
                 Value = "risto",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        output.OutputParameters = new OutputParameter[]
+        input.OutputParameters = new OutputParameter[]
         {
             new OutputParameter
             {
                 Name = "address",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        result = await Oracle.ExecuteProcedure(_input, output, _options, new CancellationToken());
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
+    /// <summary>
+    /// Verifies parameter binding by position when binding by name is disabled.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_ProcedureWithoutBindByName()
     {
         var options = new Options
         {
             BindParameterByName = false,
-            ThrowErrorOnFailure = true
+            ThrowErrorOnFailure = true,
         };
 
-        _input.Command = @$"
-create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+        input.Command = @$"
+create or replace procedure {Proc} (name in varchar2, address out varchar2) as
 begin
   select address into address from workers where name = name;
-end {_proc};";
-        _input.CommandType = OracleCommandType.Command;
+end {Proc};";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.JSONString
-        };
+        input.DataReturnType = OracleCommandReturnType.JSONString;
 
-        var result = await Oracle.ExecuteProcedure(_input, output, options, new CancellationToken());
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
-        _input.Command = _proc;
-        _input.CommandType = OracleCommandType.StoredProcedure;
-        _input.Parameters = new InputParameter[]
+        input.Command = Proc;
+        input.CommandType = OracleCommandType.StoredProcedure;
+        input.Parameters = new InputParameter[]
         {
             new InputParameter
             {
                 Name = "n",
                 Value = "risto",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        output.OutputParameters = new OutputParameter[]
+        input.OutputParameters = new OutputParameter[]
         {
             new OutputParameter
             {
                 Name = "a",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        result = await Oracle.ExecuteProcedure(_input, output, options, new CancellationToken());
+        result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
     }
 
+    /// <summary>
+    /// Verifies that returned output parameters contain their expected values.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_ReturnsCorrectOutputParameterValue()
     {
@@ -405,11 +418,6 @@ end {_proc};";
             END;",
             CommandType = OracleCommandType.Command,
             Parameters = Array.Empty<InputParameter>(),
-            ConnectionString = _connectionString
-        };
-
-        var output = new Output
-        {
             DataReturnType = OracleCommandReturnType.Parameters,
             OutputParameters = new[]
             {
@@ -417,12 +425,12 @@ end {_proc};";
                 {
                     Name = "v_doc_rev",
                     DataType = ProcedureParameterType.NVarchar2,
-                    Size = 50
-                }
-            }
+                    Size = 50,
+                },
+            },
         };
 
-        var result = await Oracle.ExecuteProcedure(input, output, _options, new CancellationToken());
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
 
         ClassicAssert.IsTrue(result.Success);
 
@@ -431,6 +439,10 @@ end {_proc};";
         ClassicAssert.AreEqual("OK_TEST", returnedParams["v_doc_rev"]?.ToString());
     }
 
+    /// <summary>
+    /// Verifies Oracle values of multiple data types, including nulls.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_ViewDocument_AllTypesAndNulls()
     {
@@ -449,11 +461,6 @@ end {_proc};";
             END;",
             CommandType = OracleCommandType.Command,
             Parameters = Array.Empty<InputParameter>(),
-            ConnectionString = _connectionString
-        };
-
-        var output = new Output
-        {
             DataReturnType = OracleCommandReturnType.Parameters,
             OutputParameters = new[]
             {
@@ -461,43 +468,43 @@ end {_proc};";
                 {
                     Name = "v_file_data",
                     DataType = ProcedureParameterType.Blob,
-                    Size = 90000000
+                    Size = 90000000,
                 },
                 new OutputParameter
                 {
                     Name = "v_file_type",
                     DataType = ProcedureParameterType.Varchar2,
-                    Size = 100
+                    Size = 100,
                 },
                 new OutputParameter
                 {
                     Name = "v_doc_title",
                     DataType = ProcedureParameterType.Varchar2,
-                    Size = 200
+                    Size = 200,
                 },
                 new OutputParameter
                 {
                     Name = "v_err_msg",
                     DataType = ProcedureParameterType.Varchar2,
-                    Size = 1000
+                    Size = 1000,
                 },
                 new OutputParameter
                 {
                     Name = "v_optional_field",
                     DataType = ProcedureParameterType.Varchar2,
-                    Size = 100
-                }
-            }
+                    Size = 100,
+                },
+            },
         };
 
         var options = new Options
         {
             BindParameterByName = true,
             TimeoutSeconds = 30,
-            ThrowErrorOnFailure = false
+            ThrowErrorOnFailure = false,
         };
 
-        var result = await Oracle.ExecuteProcedure(input, output, options, new CancellationToken());
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
 
         ClassicAssert.IsTrue(result.Success, "Should execute successfully");
         var returnedParams = (Dictionary<string, object>)result.Output;
@@ -513,16 +520,19 @@ end {_proc};";
 
         ClassicAssert.IsFalse(
             blobValue.GetType().FullName.Contains("OracleBlob"),
-            "BLOB should be converted to byte[] or string, not OracleBlob object!"
-        );
+            "BLOB should be converted to byte[] or string, not OracleBlob object!");
     }
 
+    /// <summary>
+    /// Verifies that large BLOB values are read completely.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_LargeBlob_IsReadCompletely()
     {
         const int expectedMinSize = 250000; // > 80 KB
 
-        _input.Command = @"
+        input.Command = @"
             DECLARE
                 l_blob BLOB;
                 l_raw  RAW(32767);
@@ -537,23 +547,20 @@ end {_proc};";
                 :out_blob := l_blob;
             END;";
 
-        _input.CommandType = OracleCommandType.Command;
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.Parameters,
-            OutputParameters = new[]
+        input.DataReturnType = OracleCommandReturnType.Parameters;
+        input.OutputParameters = new[]
             {
                 new OutputParameter
                 {
                     Name = "out_blob",
                     DataType = ProcedureParameterType.Blob,
-                    Size = 1000000
-                }
-            }
-        };
+                    Size = 1000000,
+                },
+            };
 
-        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result.Success);
 
         var dict = (Dictionary<string, object>)result.Output;
@@ -567,64 +574,65 @@ end {_proc};";
         ClassicAssert.IsTrue(decoded.All(b => b == (byte)'A'));
     }
 
+    /// <summary>
+    /// Compares execution times with connection pool clearing enabled and disabled.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_ClearConnectionPools_SpeedUp_MultipleCalls()
     {
-        _input.Command = @$"
-create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+        input.Command = @$"
+create or replace procedure {Proc} (name in varchar2, address out varchar2) as
 begin
   select address into address from workers where name = name;
-end {_proc};";
-        _input.CommandType = OracleCommandType.Command;
+end {Proc};";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.AffectedRows
-        };
-        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        input.DataReturnType = OracleCommandReturnType.AffectedRows;
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         Assert.That(result.Success);
 
-        _input.Command = _proc;
-        _input.CommandType = OracleCommandType.StoredProcedure;
-        _input.Parameters = new InputParameter[]
+        input.Command = Proc;
+        input.CommandType = OracleCommandType.StoredProcedure;
+        input.Parameters = new InputParameter[]
         {
             new()
             {
                 Name = "name",
                 Value = "risto",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
-        output.OutputParameters = new OutputParameter[]
+        input.OutputParameters = new OutputParameter[]
         {
             new()
             {
                 Name = "address",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
         const int numberOfCalls = 100;
 
-        _options.ClearConnectionPools = false;
+        connection.ClearConnectionPools = false;
         long totalTimeForFalse = 0;
 
         for (int i = 0; i < numberOfCalls; i++)
         {
             var sw = Stopwatch.StartNew();
-            await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+            await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
             sw.Stop();
             totalTimeForFalse += sw.ElapsedMilliseconds;
         }
 
-        _options.ClearConnectionPools = true;
+        connection.ClearConnectionPools = true;
         long totalTimeForTrue = 0;
 
         for (int i = 0; i < numberOfCalls; i++)
         {
             var sw = Stopwatch.StartNew();
-            await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+            await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
             sw.Stop();
             totalTimeForTrue += sw.ElapsedMilliseconds;
         }
@@ -638,107 +646,110 @@ end {_proc};";
             $"Total difference for {numberOfCalls} calls = {totalTimeForTrue - totalTimeForFalse} ms");
         Assert.That(totalTimeForFalse, Is.LessThan(totalTimeForTrue));
 
-
-        //last call to clear connection pools for TearDown to work
-        _options.ClearConnectionPools = true;
-        await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        // last call to clear connection pools for TearDown to work
+        connection.ClearConnectionPools = true;
+        await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
     }
 
+    /// <summary>
+    /// Verifies that the connection remains open when configured not to close.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_CloseConnection_SetToFalse_ShouldLeaveConnectionOpen()
     {
-        _input.Command = @$"
-create or replace procedure {_proc} (name in varchar2, address out varchar2) as
+        input.Command = @$"
+create or replace procedure {Proc} (name in varchar2, address out varchar2) as
 begin
   select address into address from workers where name = name;
-end {_proc};";
-        _input.CommandType = OracleCommandType.Command;
+end {Proc};";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.AffectedRows
-        };
+        input.DataReturnType = OracleCommandReturnType.AffectedRows;
 
-        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         Assert.That(result.Success);
 
-        _input.Command = _proc;
-        _input.CommandType = OracleCommandType.StoredProcedure;
-        _input.Parameters = new InputParameter[]
+        input.Command = Proc;
+        input.CommandType = OracleCommandType.StoredProcedure;
+        input.Parameters = new InputParameter[]
         {
             new()
             {
                 Name = "name",
                 Value = "risto",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
-        output.OutputParameters = new OutputParameter[]
+        input.OutputParameters = new OutputParameter[]
         {
             new()
             {
                 Name = "address",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
+                Size = 255,
+            },
         };
 
-        _options.CloseConnection = false;
-        await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        connection.CloseConnection = false;
+        await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
 
-        await using var con = new OracleConnection(_connectionStringSys);
+        await using var con = new OracleConnection(connectionStringSys);
         await con.OpenAsync();
         var ex = Assert.Throws<OracleException>(() => Helpers.DropTestUser(con));
         Assert.That(ex, Is.Not.Null);
-        Assert.That(ex.Message, Does.Contain("ORA-01940"),
+        Assert.That(
+            ex.Message,
+            Does.Contain("ORA-01940"),
             "Expected ORA-01940 error indicating user is still in use.");
 
-        //last call to close connection for TearDown to work
-        _options.CloseConnection = true;
-        await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        // last call to close connection for TearDown to work
+        connection.CloseConnection = true;
+        await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
     }
 
+    /// <summary>
+    /// Verifies that a cached connection recovers after an Oracle restart.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_WithCachedConnection_RecoversAfterOracleRestart()
     {
-        using var setupCon = new OracleConnection(_connectionStringSys);
+        using var setupCon = new OracleConnection(connectionStringSys);
         setupCon.Open();
-        Helpers.CreateTestProcedure(setupCon, _proc);
+        Helpers.CreateTestProcedure(setupCon, Proc);
         setupCon.Close();
 
-        _input.Command = _proc;
-        _input.CommandType = OracleCommandType.StoredProcedure;
-        _input.Parameters = new[]
+        input.Command = Proc;
+        input.CommandType = OracleCommandType.StoredProcedure;
+        input.Parameters = new[]
         {
         new InputParameter
         {
             Name = "p_name",
             Value = "risto",
             DataType = ProcedureParameterType.Varchar2,
-            Size = 255
-        }
-    };
+            Size = 255,
+        },
+        };
 
-        var output = new Output
+        input.DataReturnType = OracleCommandReturnType.Parameters;
+        input.OutputParameters = new[]
         {
-            DataReturnType = OracleCommandReturnType.Parameters,
-            OutputParameters = new[]
-            {
             new OutputParameter
             {
                 Name = "p_address",
                 DataType = ProcedureParameterType.Varchar2,
-                Size = 255
-            }
-        }
+                Size = 255,
+            },
         };
 
-        _options.CloseConnection = false;
-        _options.ClearConnectionPools = false;
-        _options.ThrowErrorOnFailure = true;
+        connection.CloseConnection = false;
+        connection.ClearConnectionPools = false;
+        options.ThrowErrorOnFailure = true;
 
-        var result1 = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        var result1 = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result1.Success);
         var dict1 = (Dictionary<string, object>)result1.Output;
         ClassicAssert.AreEqual("haapatie 9", dict1["p_address"]);
@@ -747,19 +758,19 @@ end {_proc};";
         await oracleContainer.StopAsync();
         await Task.Delay(3000);
         await oracleContainer.StartAsync();
-        Helpers.TestConnectionBeforeRunningTests(_connectionStringSys);
+        Helpers.TestConnectionBeforeRunningTests(connectionStringSys);
 
-        using (var recreateCon = new OracleConnection(_connectionStringSys))
+        using (var recreateCon = new OracleConnection(connectionStringSys))
         {
             recreateCon.Open();
             Helpers.CreateTestUser(recreateCon);
             Helpers.CreateTestTable(recreateCon);
             Helpers.InsertTestData(recreateCon);
-            Helpers.CreateTestProcedure(recreateCon, _proc);
+            Helpers.CreateTestProcedure(recreateCon, Proc);
             recreateCon.Close();
         }
 
-        var result2 = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        var result2 = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
         ClassicAssert.IsTrue(result2.Success);
         var dict2 = (Dictionary<string, object>)result2.Output;
         ClassicAssert.AreEqual("haapatie 9", dict2["p_address"]);
@@ -767,50 +778,64 @@ end {_proc};";
         var cleanupOptions = new Options
         {
             ThrowErrorOnFailure = false,
-            CloseConnection = true,
-            ClearConnectionPools = true
         };
 
-        await Oracle.ExecuteProcedure(_input, output, cleanupOptions, CancellationToken.None);
+        connection.CloseConnection = true;
+        connection.ClearConnectionPools = true;
+        await Oracle.ExecuteProcedure(input, connection, cleanupOptions, CancellationToken.None);
     }
 
+    /// <summary>
+    /// Verifies that invalid SQL returns an error when throwing is disabled.
+    /// </summary>
+    /// <returns>A task representing the test operation.</returns>
     [Test]
     public async Task ExecuteProcedure_WithInvalidSql_ReturnsErrorWhenThrowErrorOnFailureFalse()
     {
-        _input.Command = "INVALID SQL SYNTAX HERE";
-        _input.CommandType = OracleCommandType.Command;
+        input.Command = "INVALID SQL SYNTAX HERE";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.AffectedRows
-        };
+        input.DataReturnType = OracleCommandReturnType.AffectedRows;
 
-        _options.ThrowErrorOnFailure = false;
+        options.ThrowErrorOnFailure = false;
 
-        var result = await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None);
+        var result = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
 
         ClassicAssert.IsFalse(result.Success);
-        ClassicAssert.IsNotNull(result.Output);
-        ClassicAssert.IsTrue(result.Output.Contains("ORA-"));
+        ClassicAssert.IsNotNull(result.Error);
+        ClassicAssert.That(result.Error.Message, Does.Contain("ORA-"));
+        ClassicAssert.IsNotNull(result.Error.AdditionalInfo);
     }
 
+    /// <summary>
+    /// Verifies that invalid SQL throws when configured to throw on failure.
+    /// </summary>
     [Test]
-    public void ExecuteProcedure_WithInvalidSql_ThrowsExceptionWhenThrowErrorOnFailureTrue()
+    public async Task ExecuteProcedure_WithInvalidSql_ThrowsExceptionWhenThrowErrorOnFailureTrue()
     {
-        _input.Command = "INVALID SQL SYNTAX HERE";
-        _input.CommandType = OracleCommandType.Command;
+        input.Command = "INVALID SQL SYNTAX HERE";
+        input.CommandType = OracleCommandType.Command;
 
-        var output = new Output
-        {
-            DataReturnType = OracleCommandReturnType.AffectedRows
-        };
+        input.DataReturnType = OracleCommandReturnType.AffectedRows;
 
-        _options.ThrowErrorOnFailure = true;
+        options.ThrowErrorOnFailure = true;
+        options.ErrorMessageOnFailure = "Procedure execution failed";
 
-        var ex = Assert.ThrowsAsync<Exception>(async () =>
-            await Oracle.ExecuteProcedure(_input, output, _options, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<Exception>(async () =>
+            await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None));
 
         ClassicAssert.IsNotNull(ex);
-        ClassicAssert.IsTrue(ex.Message.Contains("Error when executing command"));
+        ClassicAssert.AreEqual("Procedure execution failed", ex.Message);
+        ClassicAssert.IsNotNull(ex.InnerException);
+    }
+
+    private static int GetAvailableHostPort()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+
+        return port;
     }
 }

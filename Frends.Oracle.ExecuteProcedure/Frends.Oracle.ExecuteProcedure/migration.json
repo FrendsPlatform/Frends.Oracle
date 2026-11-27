@@ -1,0 +1,48 @@
+[
+  {
+    "Task": "Frends.Oracle.ExecuteProcedure.Oracle.ExecuteProcedure",
+    "Migrations": [
+      {
+        "Version": "3.0.0",
+        "Description": "Moved DataReturnType and OutputParameters from Output to Input, ConnectionString from Input to Connection, and connection lifecycle and retry settings from Options to Connection.",
+        "Migration": [
+          {
+            "Type": "Copy",
+            "Source": "Output.DataReturnType",
+            "Target": "Input.DataReturnType"
+          },
+          {
+            "Type": "Copy",
+            "Source": "Output.OutputParameters",
+            "Target": "Input.OutputParameters"
+          },
+          {
+            "Type": "Copy",
+            "Source": "Input.ConnectionString",
+            "Target": "Connection.ConnectionString"
+          },
+          {
+            "Type": "Copy",
+            "Source": "Options.ClearConnectionPools",
+            "Target": "Connection.ClearConnectionPools"
+          },
+          {
+            "Type": "Copy",
+            "Source": "Options.CloseConnection",
+            "Target": "Connection.CloseConnection"
+          },
+          {
+            "Type": "Copy",
+            "Source": "Options.ConnectionRetryAttempts",
+            "Target": "Connection.ConnectionRetryAttempts"
+          },
+          {
+            "Type": "Copy",
+            "Source": "Options.ConnectionRetryDelayMs",
+            "Target": "Connection.ConnectionRetryDelayMs"
+          }
+        ]
+      }
+    ]
+  }
+]

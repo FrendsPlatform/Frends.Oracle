@@ -1,7 +1,7 @@
-﻿using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
-
 namespace Frends.Oracle.ExecuteProcedure.Definitions;
+
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 
 /// <summary>
 /// Output parameter.
@@ -9,7 +9,7 @@ namespace Frends.Oracle.ExecuteProcedure.Definitions;
 public class OutputParameter
 {
     /// <summary>
-    /// The name of the parameter.
+    /// Name of the parameter.
     /// </summary>
     /// <example>"first_name"</example>
     [DefaultValue("ParameterName")]
@@ -17,7 +17,7 @@ public class OutputParameter
     public string Name { get; set; }
 
     /// <summary>
-    /// The data type of the parameter
+    /// Data type of the parameter.
     /// </summary>
     /// <example>QueryParameterType.NVarchar2</example>
     [DefaultValue(ProcedureParameterType.NVarchar2)]
@@ -29,4 +29,3 @@ public class OutputParameter
     /// <example>255</example>
     public int Size { get; set; }
 }
-

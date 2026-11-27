@@ -1,7 +1,7 @@
-﻿using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
-
 namespace Frends.Oracle.ExecuteProcedure.Definitions;
+
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 
 /// <summary>
 /// Input parameter.
@@ -9,7 +9,7 @@ namespace Frends.Oracle.ExecuteProcedure.Definitions;
 public class InputParameter
 {
     /// <summary>
-    /// The name of the parameter.
+    /// Name of the parameter.
     /// </summary>
     /// <example>"first_name"</example>
     [DefaultValue("ParameterName")]
@@ -17,14 +17,14 @@ public class InputParameter
     public string Name { get; set; }
 
     /// <summary>
-    /// The value of the parameter.
+    /// Value of the parameter.
     /// </summary>
     /// <example>"Saija"</example>
     [DisplayFormat(DataFormatString = "Text")]
     public dynamic Value { get; set; }
 
     /// <summary>
-    /// The data type of the parameter.
+    /// Data type of the parameter.
     /// </summary>
     /// <example>QueryParameterType.NVarchar2</example>
     [DefaultValue(ProcedureParameterType.NVarchar2)]
@@ -36,4 +36,3 @@ public class InputParameter
     /// <example>255</example>
     public int Size { get; set; }
 }
-
