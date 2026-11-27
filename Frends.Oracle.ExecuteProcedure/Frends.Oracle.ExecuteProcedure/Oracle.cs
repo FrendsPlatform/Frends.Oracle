@@ -33,14 +33,14 @@ public static class Oracle
         [PropertyTab] Options options,
         CancellationToken cancellationToken)
     {
-        if (options.ConnectionRetryAttempts < 0 || options.ConnectionRetryAttempts > 4)
+        if (connection.ConnectionRetryAttempts < 0 || connection.ConnectionRetryAttempts > 4)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.ConnectionRetryAttempts),
+                nameof(connection.ConnectionRetryAttempts),
                 "ConnectionRetryAttempts must be in range 0-4.");
         }
 
-        var maxAttempts = 1 + options.ConnectionRetryAttempts;
+        var maxAttempts = 1 + connection.ConnectionRetryAttempts;
         Exception lastException = null;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
@@ -99,9 +99,17 @@ public static class Oracle
             {
                 lastException = ex;
 
-                if (await RetryOnStaleConnection(ex, attempt, maxAttempts, connection.ConnectionString, options.ConnectionRetryDelayMs, cancellationToken))
+                if (await RetryOnStaleConnection(ex, attempt, maxAttempts, connection.ConnectionString, connection.ConnectionRetryDelayMs, cancellationToken))
                 {
                     continue;
+                }
+
+                if (attempt == maxAttempts && IsStaleConnectionException(ex))
+                {
+                    var retryExhaustedException = new ArgumentException(
+                        $"Error when executing command after {maxAttempts} attempt(s): {ex.Message}",
+                        ex);
+                    return retryExhaustedException.Handle(options);
                 }
 
                 return ex.Handle(options);
@@ -110,14 +118,14 @@ public static class Oracle
             {
                 if (con != null)
                 {
-                    if (options.CloseConnection)
+                    if (connection.CloseConnection)
                     {
                         await con.CloseAsync();
                         con.Dispose();
                         LazyConnectionCache.TryRemove(connection.ConnectionString, out _);
                     }
 
-                    if (options.ClearConnectionPools)
+                    if (connection.ClearConnectionPools)
                     {
                         OracleConnection.ClearAllPools();
                     }

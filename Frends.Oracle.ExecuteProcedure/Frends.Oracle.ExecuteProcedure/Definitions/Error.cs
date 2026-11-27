@@ -8,7 +8,7 @@ public class Error
     /// <summary>
     /// Summary of the error.
     /// </summary>
-    /// <example>Unable to execute the Oracle command.</example>
+    /// <example>Unable to execute the Oracle command</example>
     public string Message { get; set; }
 
     /// <summary>

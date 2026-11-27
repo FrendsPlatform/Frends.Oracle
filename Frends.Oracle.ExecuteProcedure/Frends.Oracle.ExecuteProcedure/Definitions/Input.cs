@@ -11,7 +11,7 @@ public class Input
     /// <summary>
     /// Query to be executed in string format.
     /// </summary>
-    /// <example>"SpGetResultsByAge".</example>
+    /// <example>"SpGetResultsByAge"</example>
     [DisplayFormat(DataFormatString = "Sql")]
     [DefaultValue("")]
     public string Command { get; set; }
@@ -19,20 +19,20 @@ public class Input
     /// <summary>
     /// Type of the command: Command or Stored Procedure.
     /// </summary>
-    /// <example>OracleCommandType.StoredProcedure.</example>
+    /// <example>OracleCommandType.StoredProcedure</example>
     [DefaultValue(OracleCommandType.StoredProcedure)]
     public OracleCommandType CommandType { get; set; }
 
     /// <summary>
     /// Parameters for the database query.
     /// </summary>
-    /// <example>{ Name = "ParamName", Value = "Example value", DataType = ProcedureParameterType.NVarchar2 }.</example>
+    /// <example>{ Name = "ParamName", Value = "Example value", DataType = ProcedureParameterType.NVarchar2 }</example>
     public InputParameter[] Parameters { get; set; }
 
     /// <summary>
     /// Data type for the result of the procedure.
     /// </summary>
-    /// <example>OracleCommandReturnType.XDocument.</example>
+    /// <example>OracleCommandReturnType.XDocument</example>
     [DisplayFormat(DataFormatString = "Text")]
     [DefaultValue(OracleCommandReturnType.XDocument)]
     public OracleCommandReturnType DataReturnType { get; set; }
@@ -40,6 +40,6 @@ public class Input
     /// <summary>
     /// Parameters for the output of the procedure or command.
     /// </summary>
-    /// <example>{ Name = "address", DataType = ProcedureParameterType.Varchar2, Size = 255 }.</example>
+    /// <example>{ Name = "address", DataType = ProcedureParameterType.Varchar2, Size = 255 }</example>
     public OutputParameter[] OutputParameters { get; set; }
 }

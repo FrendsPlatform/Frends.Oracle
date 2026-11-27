@@ -615,7 +615,7 @@ end {Proc};";
         };
         const int numberOfCalls = 100;
 
-        options.ClearConnectionPools = false;
+        connection.ClearConnectionPools = false;
         long totalTimeForFalse = 0;
 
         for (int i = 0; i < numberOfCalls; i++)
@@ -626,7 +626,7 @@ end {Proc};";
             totalTimeForFalse += sw.ElapsedMilliseconds;
         }
 
-        options.ClearConnectionPools = true;
+        connection.ClearConnectionPools = true;
         long totalTimeForTrue = 0;
 
         for (int i = 0; i < numberOfCalls; i++)
@@ -647,7 +647,7 @@ end {Proc};";
         Assert.That(totalTimeForFalse, Is.LessThan(totalTimeForTrue));
 
         // last call to clear connection pools for TearDown to work
-        options.ClearConnectionPools = true;
+        connection.ClearConnectionPools = true;
         await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
     }
 
@@ -692,7 +692,7 @@ end {Proc};";
             },
         };
 
-        options.CloseConnection = false;
+        connection.CloseConnection = false;
         await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
 
         await using var con = new OracleConnection(connectionStringSys);
@@ -705,7 +705,7 @@ end {Proc};";
             "Expected ORA-01940 error indicating user is still in use.");
 
         // last call to close connection for TearDown to work
-        options.CloseConnection = true;
+        connection.CloseConnection = true;
         await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
     }
 
@@ -745,8 +745,8 @@ end {Proc};";
             },
         };
 
-        options.CloseConnection = false;
-        options.ClearConnectionPools = false;
+        connection.CloseConnection = false;
+        connection.ClearConnectionPools = false;
         options.ThrowErrorOnFailure = true;
 
         var result1 = await Oracle.ExecuteProcedure(input, connection, options, CancellationToken.None);
@@ -778,10 +778,10 @@ end {Proc};";
         var cleanupOptions = new Options
         {
             ThrowErrorOnFailure = false,
-            CloseConnection = true,
-            ClearConnectionPools = true,
         };
 
+        connection.CloseConnection = true;
+        connection.ClearConnectionPools = true;
         await Oracle.ExecuteProcedure(input, connection, cleanupOptions, CancellationToken.None);
     }
 
