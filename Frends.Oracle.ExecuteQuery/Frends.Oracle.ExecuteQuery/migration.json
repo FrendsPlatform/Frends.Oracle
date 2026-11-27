@@ -1,0 +1,18 @@
+[
+  {
+    "Task": "Frends.Oracle.ExecuteQuery",
+    "Migrations": [
+      {
+        "Version": "5.0.0",
+        "Description": "Moved the connection string to the Connection tab and added structured error details.",
+        "Migration": [
+          {
+            "Type": "Copy",
+            "Source": "Input.ConnectionString",
+            "Target": "Connection.ConnectionString"
+          }
+        ]
+      }
+    ]
+  }
+]
